@@ -44,13 +44,16 @@
 ### 方法 A：命令行 CLI 自动生成（推荐）
 在目标工程根目录下执行：
 ```bash
-# 生成英文版（默认）
-ai-context-handoff --lang en
+# 生成英文版，启用平台与依赖扫描、运行 pytest 测试并打包 XML
+ai-context-handoff --lang en --scan --test "pytest" --pack
 
 # 生成中文版（并指定目录）
-ai-context-handoff --lang zh --dir /path/to/project
+ai-context-handoff --lang zh --dir /path/to/project --scan --test "pytest" --pack
 ```
 * CLI 工具会自动统计 Git 变更，**智能提取并保留原有的任务清单与目标**，并对敏感信息（API Key、Token、邮箱、内网 IP 等）进行自动脱敏过滤，替换为 `<REDACTED_SECRET>`。
+* `--scan` 会扫描工程中平台专属的 API 引用（如 `chrome.*`）并解析第三方包依赖。
+* `--test` 会自动在当前项目运行指定的测试指令，并将执行输出（stdout/stderr）和结果写入 `validation.md`。
+* `--pack` 会将当前语言的所有 `.ai-context` 交接文档打包进单一的 XML 文件（`.ai-context/packaged-context.xml` 或 `.zh-CN.xml`），从而提高后续接手 Agent 的 Token 吸收率与速度。
 
 ### 方法 B：Agent 系统规则集成
 1. 复制项目中的 [SKILL.zh-CN.md](agent_context_handoff/SKILL.zh-CN.md) 或 [SKILL.md](agent_context_handoff/SKILL.md)。

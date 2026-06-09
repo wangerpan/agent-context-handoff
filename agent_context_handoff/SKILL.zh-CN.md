@@ -48,11 +48,11 @@
 所有的验证命令必须使用动态断言，而非静态行数或内容匹配（例如检查返回的 JSON 体是否非空、HTTP 200、或者包含特定 Key）。
 
 ### 4. CLI 工具协同 (推荐优先执行)
-如果当前项目安装了 `agent-context-handoff`，你可以直接在终端中运行以下命令来自动收集 Git 状态、解析变更并对敏感数据进行高级脱敏：
-- 中文交接：`ai-context-handoff --lang zh --focus "下阶段任务目标" --scan`
-- 英文交接：`ai-context-handoff --lang en --focus "Describe the focus" --scan`
+如果当前项目安装了 `agent-context-handoff`，你可以直接在终端中运行以下命令来自动收集 Git 状态、解析变更、执行自动化测试并进行 XML 上下文打包：
+- 中文交接：`ai-context-handoff --lang zh --focus "下阶段任务目标" --scan --test "pytest" --pack`
+- 英文交接：`ai-context-handoff --lang en --focus "Describe the focus" --scan --test "pytest" --pack`
 
-运行完 CLI 后，你只需要手动打开 `.ai-context/` 目录，并根据开发进度细化修改相关文件即可。
+运行完 CLI 后，您可以手动微调生成的上下文文件，并引导接手的 Agent 直接读取打包好的 XML 文件（如 `.ai-context/packaged-context.zh-CN.xml`）来极速吸纳所有上下文（节省 Token）。
 
 ### 5. 敏感数据脱敏
 您必须对生成的内容进行敏感信息扫描和脱敏。将敏感值统一替换为占位符：

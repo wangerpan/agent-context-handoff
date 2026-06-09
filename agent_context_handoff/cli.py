@@ -59,7 +59,7 @@ def get_line_count(file_path):
     return "N/A"
 
 def scan_platform_apis(target_dir):
-    """Scan the codebase for platform specific API references (pure Python implementation)."""
+    """Scan the codebase for platform specific API references and static external dependencies."""
     apis = {
         "chrome.storage": "Chrome Extension Storage API",
         "chrome.runtime": "Chrome Extension Runtime API",
@@ -72,6 +72,15 @@ def scan_platform_apis(target_dir):
     exclude_dirs = {".git", "node_modules", "__pycache__", "dist", "build", ".venv", "venv", ".ai-context"}
     valid_extensions = {".js", ".ts", ".html", ".py", ".java", ".json", ".vue", ".jsx", ".tsx"}
     
+    dependencies = {}
+    js_stdlib = {"path", "fs", "crypto", "http", "os", "child_process", "util", "events", "stream", "url", "querystring", "zlib", "assert", "readline", "process"}
+    py_stdlib = {"os", "sys", "re", "argparse", "subprocess", "datetime", "time", "json", "math", "collections", "shutil", "tempfile", "hashlib", "urllib", "traceback", "logging", "typing", "functools", "abc", "uuid", "io", "pathlib", "random", "ast", "inspect", "unittest"}
+    
+    js_import_pat = re.compile(r'\bimport\s+(?:(?:[\w\s{},*]+)\s+from\s+)?[\'"]([a-zA-Z0-9@\-_/]+)[\'"]')
+    js_require_pat = re.compile(r'\brequire\(\s*[\'"]([a-zA-Z0-9@\-_/]+)[\'"]\s*\)')
+    py_import_pat = re.compile(r'^\s*import\s+([a-zA-Z0-9_]+)', re.MULTILINE)
+    py_from_pat = re.compile(r'^\s*from\s+([a-zA-Z0-9_]+)\s+import', re.MULTILINE)
+    
     try:
         for root, dirs, files in os.walk(target_dir):
             dirs[:] = [d for d in dirs if d not in exclude_dirs]
@@ -82,15 +91,72 @@ def scan_platform_apis(target_dir):
                     try:
                         with open(file_path, 'r', encoding='utf-8', errors='ignore') as file_obj:
                             content = file_obj.read()
+                            # Count platform APIs
                             for api in apis:
                                 results[api] += content.count(api)
+                            
+                            # Count external dependencies
+                            if ext in {".js", ".ts", ".jsx", ".tsx", ".vue"}:
+                                imports = js_import_pat.findall(content) + js_require_pat.findall(content)
+                                for imp in imports:
+                                    pkg = imp.split('/')[0] if not imp.startswith('@') else '/'.join(imp.split('/')[:2])
+                                    if pkg and pkg not in js_stdlib:
+                                        if not os.path.exists(os.path.join(root, pkg)) and not os.path.exists(os.path.join(target_dir, pkg)):
+                                            dependencies[pkg] = dependencies.get(pkg, 0) + 1
+                            elif ext == ".py":
+                                imports = py_import_pat.findall(content) + py_from_pat.findall(content)
+                                for imp in imports:
+                                    if imp and imp not in py_stdlib:
+                                        if not os.path.exists(os.path.join(root, imp)) and not os.path.exists(os.path.join(root, imp + ".py")) and not os.path.exists(os.path.join(target_dir, imp)) and not os.path.exists(os.path.join(target_dir, imp + ".py")):
+                                            dependencies[imp] = dependencies.get(imp, 0) + 1
                     except Exception:
                         pass
     except Exception:
         pass
-    
+        
     active_apis = {k: v for k, v in results.items() if v > 0}
-    return active_apis, apis
+    active_deps = {k: v for k, v in dependencies.items() if v > 0}
+    return active_apis, apis, active_deps
+
+
+def package_context(ai_context_dir, target_dir, lang):
+    """Bundle generated language-specific .ai-context files into an XML file."""
+    suffix = ".zh-CN.md" if lang == "zh" else ".md"
+    xml_parts = [f'<ai_context language="{lang}">']
+    
+    files_to_pack = []
+    try:
+        for entry in sorted(os.listdir(ai_context_dir)):
+            if entry.endswith(suffix):
+                if "packaged-context" in entry:
+                    continue
+                files_to_pack.append(entry)
+                
+        for entry in files_to_pack:
+            file_path = os.path.join(ai_context_dir, entry)
+            rel_path = os.path.relpath(file_path, target_dir)
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                escaped = content.replace("]]>", "]]]]><![CDATA[>")
+                xml_parts.append(f'  <file path="{rel_path}">\n    <![CDATA[\n{escaped}\n    ]]>\n  </file>')
+            except Exception as e:
+                print(f"Warning: Failed to package {entry}: {e}")
+    except Exception as e:
+        print(f"Warning: Failed to scan directory for packaging: {e}")
+        
+    xml_parts.append('</ai_context>')
+    xml_content = "\n".join(xml_parts)
+    
+    pack_filename = f"packaged-context{suffix.replace('.md', '.xml')}"
+    pack_path = os.path.join(ai_context_dir, pack_filename)
+    try:
+        with open(pack_path, "w", encoding="utf-8") as f:
+            f.write(xml_content)
+        print(f"Bundled active context files into: {pack_path}")
+    except Exception as e:
+        print(f"Error writing packaged context file: {e}")
+
 
 def extract_markdown_section(content, section_headers):
     """Extract content under specific section headers (e.g. ## Objective or ## 任务目标)."""
@@ -127,6 +193,8 @@ def main():
     parser.add_argument("--dir", default=".", help="Target directory (default: current directory)")
     parser.add_argument("--focus", default="", help="Focus or objective for the next session/agent")
     parser.add_argument("--scan", action="store_true", help="Enable platform API and dependency scanning")
+    parser.add_argument("--test", help="Test command to run for auto-test integration and validation log capture")
+    parser.add_argument("--pack", action="store_true", help="Bundle generated .ai-context files into a single packaged XML file")
     args = parser.parse_args()
 
     target_dir = os.path.abspath(args.dir)
@@ -212,19 +280,28 @@ def main():
     platform_dependencies_str = ""
     
     if args.scan:
-        active_apis, apis_meta = scan_platform_apis(target_dir)
+        active_apis, apis_meta, active_deps = scan_platform_apis(target_dir)
+        scan_rows = []
+        dep_rows = []
+        
+        # 1. Platform APIs
         if active_apis:
-            scan_rows = []
-            dep_rows = []
             for api, count in active_apis.items():
                 desc = apis_meta[api]
-                scan_rows.append(f"| `{api}` | {count} | {desc} |")
-                dep_rows.append(f"| `{api}` | {count} | N/A | [Describe alternative solution here] |" if not is_zh else f"| `{api}` | {count} | N/A | [在此描述替代技术方案] |")
-            
+                scan_rows.append(f"| Platform API: `{api}` | {count} | {desc} |")
+                dep_rows.append(f"| Platform API: `{api}` | {count} | N/A | [Describe alternative solution here] |" if not is_zh else f"| 平台 API: `{api}` | {count} | N/A | [在此描述替代技术方案] |")
+        
+        # 2. External dependencies
+        if active_deps:
+            for dep, count in sorted(active_deps.items(), key=lambda x: x[1], reverse=True):
+                scan_rows.append(f"| Dependency: `{dep}` | {count} | Imported module/package |" if not is_zh else f"| 外部依赖: `{dep}` | {count} | 引入的第三方包/模块 |")
+                dep_rows.append(f"| Dependency: `{dep}` | {count} | N/A | External library |" if not is_zh else f"| 外部依赖: `{dep}` | {count} | N/A | 第三方库依赖 |")
+                
+        if scan_rows:
             platform_api_scan_str = "\n".join(scan_rows)
             platform_dependencies_str = "\n".join(dep_rows)
         else:
-            msg = "No platform specific API references found." if not is_zh else "未扫描到平台专属 API 引用。"
+            msg = "No platform specific API references or external dependencies found." if not is_zh else "未扫描到平台专属 API 引用或外部依赖。"
             platform_api_scan_str = f"- {msg}"
             platform_dependencies_str = f"| N/A | N/A | N/A | {msg} |"
     else:
@@ -342,19 +419,79 @@ def main():
         with open(issues_path, "w", encoding="utf-8") as f:
             f.write(issues_content)
 
-    # Write or keep .ai-context/validation.md
+    # Run test command if provided
+    test_output = "N/A"
+    test_status = "Untested" if not is_zh else "未测试"
+    test_cmd_used = "pytest"
+    
+    if getattr(args, 'test', None):
+        test_cmd_used = args.test
+        print(f"Running automated test: {args.test}...")
+        try:
+            res = subprocess.run(args.test, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=target_dir)
+            test_output = (res.stdout or "") + "\n" + (res.stderr or "")
+            test_output = test_output.strip()
+            if res.returncode == 0:
+                test_status = "Passed" if not is_zh else "已通过"
+            else:
+                test_status = "Failed" if not is_zh else "失败"
+        except Exception as e:
+            test_status = "Failed" if not is_zh else "失败"
+            test_output = f"Error executing test command: {e}"
+        print(f"Test status: {test_status}")
+
+    # Write or keep/update .ai-context/validation.md
     val_path = os.path.join(ai_context_dir, f"validation{suffix}")
+    
     if not os.path.exists(val_path):
         val_tpl = load_template("validation-template.zh-CN.md" if is_zh else "validation-template.md")
         val_content = val_tpl.format(
-            test_commands="pytest" if not is_zh else "pytest",
+            test_commands=test_cmd_used,
             manual_verification_steps="- Run the application manually and test handoff files" if not is_zh else "- 手动验证生成的上下文文件",
             last_validation_date=now_str,
-            last_validation_status="Untested" if not is_zh else "未测试",
-            last_validation_output="N/A"
+            last_validation_status=test_status,
+            last_validation_output=test_output
         )
         with open(val_path, "w", encoding="utf-8") as f:
             f.write(val_content)
+    else:
+        try:
+            with open(val_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            
+            new_results_block = (
+                f"## Last Verification Results\n"
+                f"- **Date**: {now_str}\n"
+                f"- **Status**: {test_status}\n"
+                f"- **Log / Output**:\n"
+                f"```\n"
+                f"{test_output}\n"
+                f"```"
+            ) if not is_zh else (
+                f"## 最近验证结果\n"
+                f"- **日期**: {now_str}\n"
+                f"- **状态**: {test_status}\n"
+                f"- **日志 / 输出片段**:\n"
+                f"```\n"
+                f"{test_output}\n"
+                f"```"
+            )
+            
+            header_matches = ["## Last Verification Results", "## 最近验证结果"]
+            replaced = False
+            for h in header_matches:
+                if h in content:
+                    parts = content.split(h)
+                    content = parts[0] + new_results_block
+                    replaced = True
+                    break
+            if not replaced:
+                content = content.strip() + "\n\n" + new_results_block
+                
+            with open(val_path, "w", encoding="utf-8") as f:
+                f.write(content)
+        except Exception as e:
+            print(f"Warning: Failed to update existing validation file: {e}")
 
     # Write .ai-context/next-agent-prompt.md
     prompt_path = os.path.join(ai_context_dir, f"next-agent-prompt{suffix}")
@@ -429,6 +566,9 @@ def main():
         print("Updated AGENTS.md with AI Context Handoff section.")
     else:
         print("AGENTS.md already contains AI Context Handoff section. Skipping append.")
+
+    if getattr(args, 'pack', False):
+        package_context(ai_context_dir, target_dir, args.lang)
 
     print("Successfully generated context files.")
 

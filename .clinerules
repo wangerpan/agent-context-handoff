@@ -35,11 +35,11 @@
 触发后，您必须将当前工作区的状态编译为项目根目录下 `.ai-context/` 目录中的结构化上下文包。输出内容必须保持 **Agent 中立**，不要假设下一个工具的具体身份。
 
 ### 1. 运行 CLI 协同 (推荐优先执行)
-如果当前项目安装了 `agent-context-handoff`，你可以直接在终端中运行以下命令来自动收集 Git 状态、解析变更并对敏感数据进行高级脱敏：
-- 中文文档生成：`ai-context-handoff --lang zh` 或 `python3 -m agent_context_handoff.cli --lang zh`
-- 英文文档生成：`ai-context-handoff --lang en` 或 `python3 -m agent_context_handoff.cli --lang en`
+如果当前项目安装了 `agent-context-handoff`，你可以直接在终端中运行以下命令来自动收集 Git 状态、进行平台与依赖扫描、运行测试并打包 XML：
+- 中文交接：`ai-context-handoff --lang zh --scan --test "pytest" --pack`
+- 英文交接：`ai-context-handoff --lang en --scan --test "pytest" --pack`
 
-运行完 CLI 后，你只需要手动打开 `.ai-context/` 目录，并根据当前任务状态细化修改相关文件即可。
+运行完 CLI 后，你只需要根据当前任务状态细化微调相关文件，或引导接手 Agent 读取打包后的 XML 文档以提升 Token 利用率。
 
 ### 2. Git 状态收集 (若不使用 CLI)
 如果无法直接运行 CLI，请运行以下命令辅助生成变更文件列表及验证摘要：

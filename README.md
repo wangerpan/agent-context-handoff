@@ -44,13 +44,16 @@ A universal, agent-neutral CLI tool and system prompt to pack, strip secrets, an
 ### Method A: Automated CLI Generation (Recommended)
 Run inside target project root:
 ```bash
-# Generate (Default: English)
-ai-context-handoff --lang en
+# Generate (Default: English) with Platform & Dependency scanning, Test run, and XML packaging
+ai-context-handoff --lang en --scan --test "pytest" --pack
 
 # Generate in Chinese (Alternative directory)
-ai-context-handoff --lang zh --dir /path/to/project
+ai-context-handoff --lang zh --dir /path/to/project --scan --test "pytest" --pack
 ```
 * CLI automatically scans Git status/diff, **preserves customized objectives & checklist** in `current-task.md`, and redacts secrets (tokens, keys, emails, private IPs) into `<REDACTED_SECRET>`.
+* `--scan` parses platform API references and extracts third-party dependencies.
+* `--test` runs the test suite automatically, logging results in `validation.md`.
+* `--pack` compiles all active markdown context files into a token-efficient XML bundle at `.ai-context/packaged-context.xml` (or `.zh-CN.xml`).
 
 ### Method B: System Instruction Integration
 1. Copy [SKILL.md](agent_context_handoff/SKILL.md) / [SKILL.zh-CN.md](agent_context_handoff/SKILL.zh-CN.md).
