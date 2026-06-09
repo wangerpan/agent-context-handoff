@@ -60,13 +60,26 @@ TargetProject/
 You can use the Python CLI tool to automatically generate the `.ai-context` files from your project's Git status and templates.
 
 #### Installation
+
+You can install the CLI tool directly from GitHub:
+```bash
+python3 -m pip install git+https://github.com/wangerpan/agent-context-handoff.git
+```
+
+Alternatively, for local development:
 ```bash
 # Clone the repository
 git clone https://github.com/wangerpan/agent-context-handoff.git
 cd agent-context-handoff
 
 # Install locally in editable mode
-pip install -e .
+python3 -m pip install -e .
+```
+
+#### Uninstallation
+To remove the package and the CLI command:
+```bash
+python3 -m pip uninstall agent-context-handoff
 ```
 
 #### Running the CLI

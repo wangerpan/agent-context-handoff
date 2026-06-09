@@ -60,13 +60,26 @@ TargetProject/
 你可以使用 Python CLI 工具，基于当前项目的 Git 状态和模板自动在目标工程生成 `.ai-context` 文件。
 
 #### 安装方法
+
+你可以直接从 GitHub 安装此 CLI 工具：
+```bash
+python3 -m pip install git+https://github.com/wangerpan/agent-context-handoff.git
+```
+
+或者克隆仓库进行本地开发安装：
 ```bash
 # 克隆仓库
 git clone https://github.com/wangerpan/agent-context-handoff.git
 cd agent-context-handoff
 
 # 以可编辑模式本地安装
-pip install -e .
+python3 -m pip install -e .
+```
+
+#### 卸载方法
+要移除此工具和命令，只需运行：
+```bash
+python3 -m pip uninstall agent-context-handoff
 ```
 
 #### 运行命令
