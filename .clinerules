@@ -1,73 +1,74 @@
-# SKILL: Agent 上下文交接 (Agent Context Handoff)
+# Rule: Agent Context Handoff
 
-[English](SKILL.md) | [简体中文](SKILL.zh-CN.md)
-
-## 描述
-这是一个通用的、不绑定特定工具的跨 Agent 工程上下文交接规范包。当触发以下唤醒词时，Agent 应该自动将当前开发上下文压缩并生成到项目根目录下的 `.ai-context/` 中。
+## Description
+Create a universal, tool-agnostic, and clean engineering context handoff package when switching coding agents. When triggered, the agent must compile the project state and write the context to `.ai-context/`.
 
 ---
 
-## 🎯 触发唤醒词 (Trigger Words)
-当用户在对话中发送以下任意触发词时，立即执行此 Skill：
-- `执行 context-handoff`
-- `执行 agent-handoff`
-- `交接`
-- `压缩上下文`
-- `导出上下文`
-- `准备切换 Agent`
-- `给其他 Agent 接手`
-- `生成交接文档`
-- `生成工程上下文包`
-- `context-handoff`
-- `agent-handoff`
-- `handoff`
-- `compress context`
-- `export context`
-- `prepare for next agent`
-- `prepare handoff`
-- `generate context pack`
-- `switch agent`
+## 🎯 Trigger Words
+Trigger this instruction when any of the following keywords or intents are encountered:
+- `context-handoff` / `agent-handoff` / `handoff`
+- `compress context` / `export context` / `prepare handoff` / `switch agent`
+- `准备切换 Agent` / `交接` / `导出上下文`
 
 ---
 
-## 📋 核心指令
+## 📋 Core Instructions
 
-触发后，您必须将当前工作区的状态编译为项目根目录下 `.ai-context/` 目录中的结构化上下文包。输出内容必须保持 **Agent 中立**，不要假设下一个工具的具体身份。
+Upon trigger, you MUST classify the project type and perform strict validations before generating or updating the `.ai-context/` directory.
 
-### 1. 运行 CLI 协同 (推荐优先执行)
-如果当前项目安装了 `agent-context-handoff`，你可以直接在终端中运行以下命令来自动收集 Git 状态、进行平台与依赖扫描、运行测试并打包 XML：
-- 中文交接：`ai-context-handoff --lang zh --scan --test "pytest" --pack`
-- 英文交接：`ai-context-handoff --lang en --scan --test "pytest" --pack`
+### 0. Project Type Detection (Conditional Trimming)
+Identify the project type to dynamically exclude irrelevant sections:
+- **Chrome Extension**: Include Platform Dependency Audit (API mapping). Skip MCP and Screen sections.
+- **Web App**: Include Tech Stack & Deployments. Skip MCP, Screen, and Agent Classification sections.
+- **CLI Tool**: Include Command entry point and dependencies. Skip MCP, Screen, and Agent Classification sections.
+- **Library / SDK**: Include Public APIs and version policies. Skip Runtime Status section entirely.
+- **Agent Plugin / Tool (OpenCode/ClaudeCode)**: Include all sections.
 
-运行完 CLI 后，你只需要根据当前任务状态细化微调相关文件，或引导接手 Agent 读取打包后的 XML 文档以提升 Token 利用率。
+### 0. Pre-Write Verification Gate (Mandatory)
+Before writing any handoff documents, you MUST verify all claims against the codebase:
+1. **Evidence Check**: For every claim like "Implemented X" or "Supports Y", grep the codebase. If no matches are found, classify the item as `📋 Planned` (zero code) or `🔄 In Progress`, NOT `✅ Completed`.
+2. **Line Count Verification**: Calculate the actual physical line counts of changed files using terminal commands. Do not estimate.
+3. **Function Validation**: Verify that any helper or private methods documented actually exist in the codebase.
+4. **Platform API Scan**: Audit platform-specific APIs (e.g. `chrome.*`, `localStorage`, `process.env`) to document coupling.
 
-### 2. Git 状态收集 (若不使用 CLI)
-如果无法直接运行 CLI，请运行以下命令辅助生成变更文件列表及验证摘要：
-- `git status --short`
-- `git diff --stat`
-- `git diff --name-only`
-- `git log --oneline -5`
-*注意：禁止将大段完整原始 git diff 写入交接文件，仅写入变更摘要。*
+### 1. Enforced Status Prefixes
+Every checklist item in the task progress sections MUST use one of the following prefixes. Items without prefixes are strictly prohibited:
+- `✅`: Completed (Code exists in workspace and is verified).
+- `🔄`: In Progress (Partial code exists; specify file paths).
+- `📋`: Planned (Zero code; log target schedule/date).
+- `⚠️`: Blocked (Work is stuck; explain active blockers).
 
-### 3. 敏感数据脱敏
-无论通过何种方式生成，都必须对上下文中的敏感信息进行脱敏，统一替换为占位符：
-- 密钥/Token -> `<REDACTED_SECRET>`
-- 密码 -> `<REDACTED_PASSWORD>`
-- 私钥 -> `<REDACTED_PRIVATE_KEY>`
-- 数据库连接 -> `<REDACTED_PROD_DB>`
-- 手机/邮箱 -> `<REDACTED_PHONE>` / `<REDACTED_EMAIL>`
-- 内网 IP -> `<REDACTED_INTERNAL_HOST>`
-- 会话 Cookie -> `<REDACTED_COOKIE>`
+### 2. Avoid Magic Numbers
+Do NOT write fixed hardcoded numbers for dynamic metrics (e.g., active agent counts, session lines) in descriptions. Use descriptive assertions (e.g., "Returns list of active agents" instead of "Returns 17 agents").
 
-### 4. 维护的目录结构
-更新或创建以下文件，中英文版分别以 `.md` 和 `.zh-CN.md` 命名：
-- `AGENTS.md` (在工程根目录，添加交接索引)
-- `.ai-context/README.md` (目录职责说明)
-- `.ai-context/project.md` (项目背景与技术栈)
-- `.ai-context/current-task.md` (任务清单与状态，**增量更新，不得覆盖原 checklist**)
-- `.ai-context/agent-handoff.md` (主交接核心说明文档)
-- `.ai-context/changed-files.md` (变更文件统计)
-- `.ai-context/decisions.md` (技术与架构决策记录)
-- `.ai-context/known-issues.md` (已知坑点与环境约束)
-- `.ai-context/validation.md` (测试命令与结果)
-- `.ai-context/next-agent-prompt.md` (给接手 Agent 的引导提示词)
+### 3. CLI Tool Integration (Recommended Flow)
+If the CLI tool is available, execute it first to generate the base context files:
+- For Chinese context: `ai-context-handoff --lang zh --scan --test "pytest" --pack`
+- For English context: `ai-context-handoff --lang en --scan --test "pytest" --pack`
+After execution, manually refine the fields with specific context details. Direct downstream agents to read the packaged XML block (`.ai-context/packaged-context.xml` or `packaged-context.zh-CN.xml`) for token-efficient loading.
+
+### 4. Sensitive Data Redaction
+You MUST sanitize all outputs. Replace secrets with:
+- Secrets / API Keys / Tokens -> `<REDACTED_SECRET>`
+- Passwords -> `<REDACTED_PASSWORD>`
+- Private Keys -> `<REDACTED_PRIVATE_KEY>`
+- Production Databases -> `<REDACTED_PROD_DB>`
+- Phones / Emails -> `<REDACTED_PHONE>` / `<REDACTED_EMAIL>`
+- Internal IPs / Hosts -> `<REDACTED_INTERNAL_HOST>`
+- Session Cookies -> `<REDACTED_COOKIE>`
+
+---
+
+## 📂 Target Directory Structure
+Maintain the following files in `.ai-context/` (use `.zh-CN.md` suffix if generating in Chinese):
+1. `AGENTS.md` (Project root: append handover index block).
+2. `.ai-context/README.md` (Directory layout and description).
+3. `.ai-context/project.md` (Tech stack, layout, and build instructions).
+4. `.ai-context/current-task.md` (Roadmap and task list. **Preserve custom checklists incrementally**).
+5. `.ai-context/agent-handoff.md` (Core handoff notes, prioritized reading order table, runtime status, public/private helper methods, platform audit table).
+6. `.ai-context/changed-files.md` (Git status snapshot, diff summaries, deleted warnings, and scanned platform APIs).
+7. `.ai-context/decisions.md` (Engineering decision logs).
+8. `.ai-context/known-issues.md` (Blockers, traps, and environment limits).
+9. `.ai-context/validation.md` (Dynamic test commands, manual steps, and execution results).
+10. `.ai-context/next-agent-prompt.md` (Read-first copy-paste instructions for the incoming agent).
