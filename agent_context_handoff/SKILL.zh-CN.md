@@ -37,7 +37,10 @@ TargetProject/
     └── next-agent-prompt.md
 ```
 
-### 2. Git 状态收集
+### 2. CLI 工具协同
+如果目标工作区中提供了 CLI 工具（例如：`ai-context-handoff` 或 `python3 -m agent_context_handoff.cli`），您应该优先运行该工具来自动生成或更新基础的 `.ai-context/` 目录结构及 Git 变更状态。工具运行完毕后，您可以再根据开发情况手动精细化修改相关文件（如 `agent-handoff.zh-CN.md` 和 `current-task.zh-CN.md`）。
+
+### 3. Git 状态收集
 如果当前环境能访问 Git，请运行以下命令辅助生成变更文件列表及验证摘要：
 - `git status --short`
 - `git diff --stat`

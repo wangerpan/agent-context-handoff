@@ -3,6 +3,7 @@ import sys
 import re
 import argparse
 import subprocess
+import datetime
 
 # Secret stripping regular expressions
 SECRET_PATTERNS = [
@@ -14,7 +15,11 @@ SECRET_PATTERNS = [
     # Standard JWT tokens
     (r'ey[a-zA-Z0-9-_]+\.ey[a-zA-Z0-9-_]+\.[a-zA-Z0-9-_]+', '<REDACTED_TOKEN>'),
     # Typical SSH private keys
-    (r'-----BEGIN [A-Z]+ PRIVATE KEY-----\n[\s\S]+?\n-----END [A-Z]+ PRIVATE KEY-----', '<REDACTED_PRIVATE_KEY>')
+    (r'-----BEGIN [A-Z]+ PRIVATE KEY-----\n[\s\S]+?\n-----END [A-Z]+ PRIVATE KEY-----', '<REDACTED_PRIVATE_KEY>'),
+    # Email addresses
+    (r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', '<REDACTED_EMAIL>'),
+    # Private IP addresses (10.x.x.x, 172.16.x.x-172.31.x.x, 192.168.x.x)
+    (r'\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b', '<REDACTED_INTERNAL_HOST>')
 ]
 
 def redact_secrets(content):
@@ -42,6 +47,35 @@ def load_template(template_name):
         with open(template_path, "r", encoding="utf-8") as f:
             return f.read()
     return ""
+
+def extract_markdown_section(content, section_headers):
+    """Extract content under specific section headers (e.g. ## Objective or ## 任务目标)."""
+    if not content:
+        return ""
+    
+    lines = content.splitlines()
+    section_content = []
+    in_section = False
+    
+    # Clean section headers to look for
+    headers = [h.strip().lower() for h in section_headers]
+    
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("##"):
+            # Header found. Check if it matches our target section.
+            header_text = stripped[2:].strip().lower()
+            if header_text in headers:
+                in_section = True
+                continue
+            elif in_section:
+                # We hit another section header, stop capturing.
+                break
+        
+        if in_section:
+            section_content.append(line)
+            
+    return "\n".join(section_content).strip()
 
 def main():
     parser = argparse.ArgumentParser(description="Universal Cross-Agent Context Handoff CLI")
@@ -101,18 +135,48 @@ def main():
         with open(proj_path, "w", encoding="utf-8") as f:
             f.write(proj_content)
 
-    # Write .ai-context/current-task.md
+    # Write or incrementally update .ai-context/current-task.md
     task_path = os.path.join(ai_context_dir, f"current-task{suffix}")
+    
+    # Default initial values
+    task_objective = "待确认 / To be confirmed"
+    task_status = "进行中 / In Progress"
+    task_checklist = "- [ ] Task 1\n- [ ] Task 2"
+    task_focus = "Task 1"
+    
+    # Parse existing file to preserve user modifications
+    if os.path.exists(task_path):
+        try:
+            with open(task_path, "r", encoding="utf-8") as f:
+                existing_task_content = f.read()
+            
+            ext_objective = extract_markdown_section(existing_task_content, ["objective", "任务目标"])
+            ext_checklist = extract_markdown_section(existing_task_content, ["task checklist", "任务清单"])
+            ext_focus = extract_markdown_section(existing_task_content, ["current focus", "当前关注焦点"])
+            
+            # Simple regex to parse status from: - **Status**: In Progress or - **当前状态**: 进行中
+            status_match = re.search(r'-\s*\*\*(?:status|当前状态)\*\*:\s*([^\n\r(]+)', existing_task_content, re.IGNORECASE)
+            
+            if ext_objective:
+                task_objective = ext_objective
+            if ext_checklist:
+                task_checklist = ext_checklist
+            if ext_focus:
+                task_focus = ext_focus
+            if status_match:
+                task_status = status_match.group(1).strip()
+        except Exception as e:
+            print(f"Warning: Failed to parse existing current-task file: {e}")
+
     task_tpl = load_template("current-task-template.zh-CN.md" if is_zh else "current-task-template.md")
-    import datetime
     now_str = datetime.datetime.now().isoformat()
     task_content = task_tpl.format(
-        current_task_objective="待确认 / To be confirmed",
-        current_task_status="进行中 / In Progress",
-        start_time=now_str,
+        current_task_objective=task_objective,
+        current_task_status=task_status,
+        start_time=now_str, # Will be set to run time, could also be extracted in future
         last_updated=now_str,
-        task_checklist="- [ ] Task 1\n- [ ] Task 2",
-        current_focus="Task 1"
+        task_checklist=task_checklist,
+        current_focus=task_focus
     )
     with open(task_path, "w", encoding="utf-8") as f:
         f.write(task_content)

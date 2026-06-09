@@ -37,7 +37,10 @@ TargetProject/
     └── next-agent-prompt.md
 ```
 
-### 2. Git Integration
+### 2. CLI Tool Integration
+If the CLI tool is available in the target workspace (e.g. `ai-context-handoff` or `python3 -m agent_context_handoff.cli`), you should prioritize running it first to automatically generate or update the basic `.ai-context/` directory structure and git-related stats. After execution, you can manually open and refine the files (like `agent-handoff.md` and `current-task.md`) with more specific context details.
+
+### 3. Git Integration
 If a git repository is accessible, run the following commands to collect status and diff information:
 - `git status --short`
 - `git diff --stat`
