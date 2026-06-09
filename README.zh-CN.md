@@ -53,20 +53,15 @@ TargetProject/
 
 ---
 
-## 🚀 如何使用
+## 🚀 安装与部署
 
-### 1. 使用命令行 CLI 工具自动化生成
-
-你可以使用 Python CLI 工具，基于当前项目的 Git 状态和模板自动在目标工程生成 `.ai-context` 文件。
-
-#### 安装方法
-
-你可以直接从 GitHub 安装此 CLI 工具：
+### 1. 线上直接安装
+你可以直接从 GitHub 在线安装此 CLI 工具：
 ```bash
 python3 -m pip install git+https://github.com/wangerpan/agent-context-handoff.git
 ```
 
-或者克隆仓库进行本地开发安装：
+### 2. 本地开发安装（可编辑模式）
 ```bash
 # 克隆仓库
 git clone https://github.com/wangerpan/agent-context-handoff.git
@@ -76,13 +71,32 @@ cd agent-context-handoff
 python3 -m pip install -e .
 ```
 
-#### 卸载方法
-要移除此工具和命令，只需运行：
+### 3. 手动拷贝安装（无 pip 依赖）
+如果你无法使用 pip 或希望零依赖运行：
+1. 下载本项目中的 `agent_context_handoff` 源码文件夹。
+2. 将其直接复制到你的目标工程根目录下。
+3. 运行 python 模块命令直接执行：
+   ```bash
+   python3 -m agent_context_handoff.cli --lang zh
+   ```
+
+### 4. Agent 辅助自动安装
+如果你当前正在和 Coding Agent（如 Cline, Cursor, Antigravity, Claude Code 等）对话，可以直接发送以下指令让 Agent 帮您安装：
+> *“帮我克隆并安装 agent-context-handoff 这个包，仓库地址为 https://github.com/wangerpan/agent-context-handoff.git”*
+Agent 将会自动克隆、执行本地安装并进行验证。
+
+### 🗑️ 卸载方法
+如需移除此工具和命令，只需运行：
 ```bash
 python3 -m pip uninstall agent-context-handoff
 ```
 
-#### 运行命令
+---
+
+## 💻 使用方法
+
+### 方法 A: 使用命令行 CLI 自动生成（推荐）
+
 在你的目标工程根目录下运行：
 ```bash
 # 生成英文版（默认）
@@ -90,21 +104,29 @@ ai-context-handoff --lang en
 
 # 生成中文版
 ai-context-handoff --lang zh
+
+# 手动指定生成目标目录
+ai-context-handoff --lang zh --dir /path/to/your/project
 ```
-该工具会自动：
-- 解析 `git status`、`git diff` 及最近的提交日志。
-- 对敏感信息（Token、API Key、密码等）进行正则扫描脱敏，并替换为 `<REDACTED_SECRET>`。
-- 创建或更新 `.ai-context/` 下的所有文件。
-- 如果 `AGENTS.md` 中没有 Handoff 入口章节，则会自动追加。
 
-### 2. Manual / Agent 提示词 Skill 使用方法
+#### CLI 参数说明：
+* `--lang`: 指定文档输出语言（`en` 或 `zh`）。
+* `--dir`: 指定生成 `.ai-context/` 的目标工作区目录（默认为当前目录 `.`）。
 
-如果你想让 AI Agent 自身直接编写并压缩交接文档：
-1. 复制 `agent_context_handoff/SKILL.md`（或 `SKILL.zh-CN.md`）中的内容。
-2. 将其添加到你的 Agent 系统提示词或规则中（例如 `.cursorrules`, `.clinerules`）。
-3. 触发 Skill：在对话中对 Agent 发送触发词即可：
-   - *“执行 context-handoff”* / *“执行 agent-handoff”*
-   - *“压缩上下文”* / *“导出上下文”* / *“准备切换 Agent”* / *“给其他 Agent 接手”*
+CLI 工具会自动执行以下操作：
+- **Git 状态捕获**：解析 `git status`、`git diff` 及最近提交日志。
+- **任务状态增量保留**：如果 `.ai-context/current-task.md` 已存在，工具会自动提取并保留已手动修改的“任务目标”和“任务清单”，避免直接覆盖覆盖。
+- **敏感信息深度脱敏**：扫描文本、状态和日志，自动对 Token、密码、密钥、敏感邮箱以及内网 IP 范围进行正则过滤脱敏，并替换为 `<REDACTED_SECRET>` 占位符。
+- **索引自动追加**：创建或更新 `AGENTS.md`，追加上下文目录入口。
+
+### 方法 B: 提示词指令集成（Manual/Agent Skill）
+如果你倾向于让 Agent 自身通过对话分析并自动压缩生成上下文：
+1. 复制 `agent_context_handoff/SKILL.zh-CN.md` (或 `SKILL.md`) 中的指令内容。
+2. 将其粘贴集成到您的 Agent 规则文件（如 `.cursorrules`、`.clinerules` 或系统 Prompts）中。
+3. 通过输入触发词唤醒 Agent 执行：
+   - *“执行 context-handoff”* / *“准备切换 Agent”* / *“压缩上下文”* / *“导出交接文档”*
+4. （可选）您也可以直接在对话中指令 Agent 运行 CLI 来预填充框架：
+   > *“直接运行 ai-context-handoff，然后根据我们当前的开发状态细化更新 current-task.md 和 agent-handoff.md”*
 
 ---
 

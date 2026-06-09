@@ -53,20 +53,15 @@ TargetProject/
 
 ---
 
-## 🚀 How to Use
+## 🚀 Installation & Setup
 
-### 1. Programmatic CLI Usage
-
-You can use the Python CLI tool to automatically generate the `.ai-context` files from your project's Git status and templates.
-
-#### Installation
-
+### 1. Online/Direct Installation
 You can install the CLI tool directly from GitHub:
 ```bash
 python3 -m pip install git+https://github.com/wangerpan/agent-context-handoff.git
 ```
 
-Alternatively, for local development:
+### 2. Local Editable Installation (Development)
 ```bash
 # Clone the repository
 git clone https://github.com/wangerpan/agent-context-handoff.git
@@ -76,13 +71,32 @@ cd agent-context-handoff
 python3 -m pip install -e .
 ```
 
-#### Uninstallation
-To remove the package and the CLI command:
+### 3. Manual Installation (No pip)
+If you don't have Python pip or want a zero-dependency setup:
+1. Download the source folder `agent_context_handoff` from this repository.
+2. Copy it directly into your target project directory.
+3. Run the CLI tool manually by calling the python module:
+   ```bash
+   python3 -m agent_context_handoff.cli --lang en
+   ```
+
+### 4. Agent-Assisted Installation
+If you are currently pairing with a Coding Agent (e.g. Cline, Cursor, Antigravity, Claude Code), you can simply instruct the agent:
+> *"Help me clone and install the agent-context-handoff package from GitHub https://github.com/wangerpan/agent-context-handoff.git"*
+The agent will handle cloning, local setup, and package verification.
+
+### 🗑️ Uninstallation
+To remove the package and the command:
 ```bash
 python3 -m pip uninstall agent-context-handoff
 ```
 
-#### Running the CLI
+---
+
+## 💻 How to Use
+
+### Method A: Automated CLI Generation (Recommended)
+
 Run the CLI in your target project root:
 ```bash
 # Generate in English (default)
@@ -90,21 +104,29 @@ ai-context-handoff --lang en
 
 # Generate in Chinese
 ai-context-handoff --lang zh
+
+# Specify target directory manually
+ai-context-handoff --lang zh --dir /path/to/your/project
 ```
-The CLI automatically:
-- Parses `git status`, `git diff`, and recent logs.
-- Redacts sensitive information (tokens, API keys, passwords) replacing them with placeholders like `<REDACTED_SECRET>`.
-- Creates or updates `.ai-context/` files.
-- Appends the Handoff index section to `AGENTS.md` if it doesn't already exist.
 
-### 2. Manual/Agent Prompt Skill Usage
+#### Detailed CLI Parameters:
+* `--lang`: The document output language (`en` or `zh`).
+* `--dir`: The workspace folder where `.ai-context/` will be generated (defaults to current directory `.`).
 
-If you prefer to have the AI Agent write and compress the handoff documents directly:
+The CLI automatically performs:
+- **Git State Capture**: Invokes git commands to retrieve modified files, lines, and logs.
+- **Incremental Task Preserve**: If `.ai-context/current-task.md` already exists, it extracts and preserves your current custom `Objective` and `Task Checklist` blocks, instead of overwriting them.
+- **Advanced Secret Scrubbing**: Scans files and output blocks for tokens, credentials, emails, and internal range IP addresses, replacing them with `<REDACTED_SECRET>` tags.
+- **Indexing update**: Appends the Handoff indexes to `AGENTS.md`.
+
+### Method B: Manual/Agent Prompt Integration
+If you prefer your AI Agent to compile the markdown files directly via conversation:
 1. Copy the contents of `agent_context_handoff/SKILL.md` (or `SKILL.zh-CN.md`).
-2. Add it to your agent's system instructions (e.g., `.cursorrules`, `.clinerules`, custom system prompt).
-3. Trigger the skill by prompting the agent with trigger words:
-   - *"context-handoff"* / *"agent-handoff"*
-   - *"compress context"* / *"export context"* / *"prepare for next agent"*
+2. Add the copied skill description into your agent's rule settings (e.g., `.cursorrules`, `.clinerules`, or system prompts).
+3. Trigger the skill by prompting the agent with keywords:
+   - *"context-handoff"* / *"agent-handoff"* / *"compress context"* / *"导出上下文"* / *"准备切换 Agent"*
+4. (Optional) Instruct the agent to run `ai-context-handoff` directly to pre-populate files:
+   > *"Run the handoff CLI and refine the results with our current status"*
 
 ---
 
