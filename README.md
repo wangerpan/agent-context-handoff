@@ -55,6 +55,10 @@ TargetProject/
 
 ## 🚀 Installation & Setup
 
+### Prerequisites
+* **Python**: Python 3.6 or higher (with `pip`)
+* **Git**: Installed and configured in the target project path
+
 ### 1. Online/Direct Installation
 You can install the CLI tool directly from GitHub:
 ```bash
