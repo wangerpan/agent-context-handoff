@@ -12,39 +12,45 @@
 ## 1. 当前任务
 {current_task_brief}
 
-## 2. 工程背景
+## 2. 当前状态 (运行时状态 - Current State)
+- **活动 Agent 分类**:
+  - 内置 (Built-in) 模块: {built_in_agents_count} (请使用描述性断言，避免死记硬编码数字)
+  - 动态 (Understand-Anything) 模块: {understand_anything_count}
+- **MCP 服务器连接状态**:
+  - 在线服务: {online_mcps}
+  - 离线服务 (如 headroom): {offline_mcps} (注意：Agent 不应尝试调用离线服务)
+- **Managed 后台 Screen 状态**:
+  - 活动 screen 数量: {active_screens}
+  - *前置启动说明*：在执行 `screen -r` 进行会话恢复之前，必须先通过 `/config` 或 `/cli` 发送 POST 请求触发初始化拉起。
+
+## 3. 工程背景
 {project_context}
 
-## 3. 技术栈
+## 4. 技术栈
 {tech_stack}
 
-## 4. 相关模块与文件
+## 5. 相关模块与文件
 | 文件路径 | 作用 / 职责 | 当前状态 |
 |---|---|---|
 {relevant_files}
 
-## 5. 本轮已完成内容
+## 6. 本轮已完成内容
 {completed_work}
 
-## 6. 尚未完成内容
+## 7. 尚未完成内容
 {remaining_work}
 
-## 7. 当前错误 / 阻塞点
+## 8. 当前错误 / 阻塞点
 {current_errors}
 
-## 8. 已确认结论与核心逻辑摘要
+## 9. 已确认结论与核心逻辑摘要
 {confirmed_decisions}
 
-## 9. 下一轮焦点 (Focus for Next Session)
+## 10. 下一轮焦点 (Focus for Next Session)
 {next_session_focus}
 
-## 10. 已知问题与环境约束
+## 11. 已知问题与环境约束
 {known_issues_summary}
-
-## 11. 已排除方案
-| 备选方案 | 排除原因 |
-|---|---|
-{rejected_alternatives}
 
 ## 12. 验证命令
 ```bash

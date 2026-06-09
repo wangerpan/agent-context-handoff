@@ -161,7 +161,6 @@ def main():
             
             status_match = re.search(r'-\s*\*\*(?:status|当前状态)\*\*:\s*([^\n\r(]+)', existing_task_content, re.IGNORECASE)
             
-            # Prioritize command-line focus over existing file content if provided
             if args.focus:
                 task_objective = args.focus
                 task_focus = args.focus
@@ -221,6 +220,7 @@ def main():
     if not os.path.exists(issues_path):
         issues_tpl = load_template("known-issues-template.zh-CN.md" if is_zh else "known-issues-template.md")
         issues_content = issues_tpl.format(
+            mcp_offline_indicators="- headroom: [OFFLINE] / [离线]",
             active_blockers="- None" if not is_zh else "- 无",
             historical_traps="- None" if not is_zh else "- 无",
             env_constraints="- Git CLI needs to be installed" if not is_zh else "- 需在支持 Git 的环境下运行"
@@ -268,6 +268,11 @@ def main():
         timestamp=now_str,
         git_commit_sha=git_commit_sha,
         session_id=session_id,
+        built_in_agents_count="17 (built-in)" if not is_zh else "17个 (内置)",
+        understand_anything_count="9 (understand-anything)" if not is_zh else "9个 (理解类)",
+        online_mcps="N/A" if not is_zh else "暂无",
+        offline_mcps="headroom [OFFLINE] / [离线]",
+        active_screens="N/A" if not is_zh else "暂无",
         current_task_brief="开发/生成 agent-context-handoff Skill" if is_zh else "Develop/generate agent-context-handoff Skill",
         project_context="自动压缩/打包当前 Coding Agent 上下文" if is_zh else "Automated compression of Coding Agent context",
         tech_stack="Python / Shell / Markdown",
@@ -277,7 +282,7 @@ def main():
         current_errors="None" if not is_zh else "无",
         confirmed_decisions="- Standardized folder layout '.ai-context/'" if not is_zh else "- 标准化 '.ai-context/' 目录结构",
         next_session_focus=next_session_focus_val,
-        known_issues_summary="- No active blockers" if not is_zh else "- 无活动阻塞项",
+        known_issues_summary="- headroom: [OFFLINE] / [离线] \n- No active blockers" if not is_zh else "- headroom: [离线] \n- 无活动阻塞项",
         rejected_alternatives="| N/A | N/A |" if not is_zh else "| 无 | 无 |",
         validation_commands="python3 -m agent_context_handoff.cli --lang zh" if is_zh else "python3 -m agent_context_handoff.cli --lang en"
     )

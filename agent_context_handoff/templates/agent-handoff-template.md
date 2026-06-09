@@ -12,39 +12,45 @@
 ## 1. Current Task
 {current_task_brief}
 
-## 2. Project Context
+## 2. Current State (Runtime Status)
+- **Active Agent Classifications**:
+  - Built-in Agents: {built_in_agents_count} (Describe classification instead of hardcoded numbers in assertions)
+  - Understand-Anything Agents: {understand_anything_count}
+- **MCP Servers Status**:
+  - Online MCPs: {online_mcps}
+  - Offline MCPs (e.g. headroom): {offline_mcps} (Do not try to call offline servers)
+- **Managed Background Screens**:
+  - Active screen count: {active_screens}
+  - *Prerequisite*: Before attaching via `screen -r`, make sure they are started by invoking `/config` or `/cli` POST endpoint first.
+
+## 3. Project Context
 {project_context}
 
-## 3. Tech Stack
+## 4. Tech Stack
 {tech_stack}
 
-## 4. Relevant Modules & Files
+## 5. Relevant Modules & Files
 | File Path | Role / Purpose | Current Status |
 |---|---|---|
 {relevant_files}
 
-## 5. Work Completed in This Run
+## 6. Work Completed in This Run
 {completed_work}
 
-## 6. Work Remaining
+## 7. Work Remaining
 {remaining_work}
 
-## 7. Current Errors / Blockers
+## 8. Current Errors / Blockers
 {current_errors}
 
-## 8. Confirmed Decisions & Key Logic Summary
+## 9. Confirmed Decisions & Key Logic Summary
 {confirmed_decisions}
 
-## 9. Focus for Next Session
+## 10. Focus for Next Session
 {next_session_focus}
 
-## 10. Known Issues & Environmental Limits
+## 11. Known Issues & Environmental Limits
 {known_issues_summary}
-
-## 11. Rejected Alternatives
-| Alternative Approach | Reasons for Rejection |
-|---|---|
-{rejected_alternatives}
 
 ## 12. Validation Commands
 ```bash
