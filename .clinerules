@@ -1,0 +1,73 @@
+# SKILL: Agent 上下文交接 (Agent Context Handoff)
+
+[English](SKILL.md) | [简体中文](SKILL.zh-CN.md)
+
+## 描述
+这是一个通用的、不绑定特定工具的跨 Agent 工程上下文交接规范包。当触发以下唤醒词时，Agent 应该自动将当前开发上下文压缩并生成到项目根目录下的 `.ai-context/` 中。
+
+---
+
+## 🎯 触发唤醒词 (Trigger Words)
+当用户在对话中发送以下任意触发词时，立即执行此 Skill：
+- `执行 context-handoff`
+- `执行 agent-handoff`
+- `交接`
+- `压缩上下文`
+- `导出上下文`
+- `准备切换 Agent`
+- `给其他 Agent 接手`
+- `生成交接文档`
+- `生成工程上下文包`
+- `context-handoff`
+- `agent-handoff`
+- `handoff`
+- `compress context`
+- `export context`
+- `prepare for next agent`
+- `prepare handoff`
+- `generate context pack`
+- `switch agent`
+
+---
+
+## 📋 核心指令
+
+触发后，您必须将当前工作区的状态编译为项目根目录下 `.ai-context/` 目录中的结构化上下文包。输出内容必须保持 **Agent 中立**，不要假设下一个工具的具体身份。
+
+### 1. 运行 CLI 协同 (推荐优先执行)
+如果当前项目安装了 `agent-context-handoff`，你可以直接在终端中运行以下命令来自动收集 Git 状态、解析变更并对敏感数据进行高级脱敏：
+- 中文文档生成：`ai-context-handoff --lang zh` 或 `python3 -m agent_context_handoff.cli --lang zh`
+- 英文文档生成：`ai-context-handoff --lang en` 或 `python3 -m agent_context_handoff.cli --lang en`
+
+运行完 CLI 后，你只需要手动打开 `.ai-context/` 目录，并根据当前任务状态细化修改相关文件即可。
+
+### 2. Git 状态收集 (若不使用 CLI)
+如果无法直接运行 CLI，请运行以下命令辅助生成变更文件列表及验证摘要：
+- `git status --short`
+- `git diff --stat`
+- `git diff --name-only`
+- `git log --oneline -5`
+*注意：禁止将大段完整原始 git diff 写入交接文件，仅写入变更摘要。*
+
+### 3. 敏感数据脱敏
+无论通过何种方式生成，都必须对上下文中的敏感信息进行脱敏，统一替换为占位符：
+- 密钥/Token -> `<REDACTED_SECRET>`
+- 密码 -> `<REDACTED_PASSWORD>`
+- 私钥 -> `<REDACTED_PRIVATE_KEY>`
+- 数据库连接 -> `<REDACTED_PROD_DB>`
+- 手机/邮箱 -> `<REDACTED_PHONE>` / `<REDACTED_EMAIL>`
+- 内网 IP -> `<REDACTED_INTERNAL_HOST>`
+- 会话 Cookie -> `<REDACTED_COOKIE>`
+
+### 4. 维护的目录结构
+更新或创建以下文件，中英文版分别以 `.md` 和 `.zh-CN.md` 命名：
+- `AGENTS.md` (在工程根目录，添加交接索引)
+- `.ai-context/README.md` (目录职责说明)
+- `.ai-context/project.md` (项目背景与技术栈)
+- `.ai-context/current-task.md` (任务清单与状态，**增量更新，不得覆盖原 checklist**)
+- `.ai-context/agent-handoff.md` (主交接核心说明文档)
+- `.ai-context/changed-files.md` (变更文件统计)
+- `.ai-context/decisions.md` (技术与架构决策记录)
+- `.ai-context/known-issues.md` (已知坑点与环境约束)
+- `.ai-context/validation.md` (测试命令与结果)
+- `.ai-context/next-agent-prompt.md` (给接手 Agent 的引导提示词)
