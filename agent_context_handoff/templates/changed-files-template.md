@@ -2,18 +2,23 @@
 
 [English](changed-files.md) | [简体中文](changed-files.zh-CN.md)
 
-## Git Status Summary
+## Git Status Snapshot
 ```
 {git_status}
 ```
 
-## Stat Summary of Changes
+## Git Diff Stat Summary
 ```
 {git_diff_stat}
 ```
 
-## Modified File Paths
+## Modified Files (Physical Size Details)
+| File Name | Location Link | Physical Line Count |
+|---|---|---|
 {git_diff_names}
+
+## Deleted Files & Directories (Clean-up Warnings)
+{git_deleted_files}
 
 ## Summary of Changes
 {changes_summary}

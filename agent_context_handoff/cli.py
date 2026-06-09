@@ -48,6 +48,16 @@ def load_template(template_name):
             return f.read()
     return ""
 
+def get_line_count(file_path):
+    """Get the physical line count of a file."""
+    try:
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                return len(f.readlines())
+    except Exception:
+        pass
+    return "N/A"
+
 def extract_markdown_section(content, section_headers):
     """Extract content under specific section headers (e.g. ## Objective or ## 任务目标)."""
     if not content:
@@ -95,32 +105,76 @@ def main():
     is_git = os.path.isdir(os.path.join(target_dir, ".git"))
     git_status = "Not a git repository"
     git_diff_stat = "N/A"
-    git_diff_names = "N/A"
     git_log = "N/A"
     git_commit_sha = "N/A"
+    
+    modified_files = []
+    deleted_files = []
 
     if is_git:
         git_status = run_command("git status --short", cwd=target_dir) or "No changes (clean)"
         git_diff_stat = run_command("git diff --stat", cwd=target_dir) or "No code changes"
-        git_diff_names_raw = run_command("git diff --name-only", cwd=target_dir)
         git_log = run_command("git log --oneline -5", cwd=target_dir) or "No commits yet"
         git_commit_sha = run_command("git rev-parse HEAD", cwd=target_dir) or "N/A"
         
-        if git_diff_names_raw:
-            git_diff_names = "\n".join([f"- [{os.path.basename(f)}](file://./{f})" for f in git_diff_names_raw.splitlines()])
-        else:
-            git_diff_names = "- None"
+        # Parse porcelain status to categorize modified vs deleted files
+        status_raw = run_command("git status --porcelain", cwd=target_dir)
+        if status_raw:
+            for line in status_raw.splitlines():
+                if len(line) > 2:
+                    state = line[:2]
+                    file_path = line[2:].strip()
+                    # Strip quotes if filename has spaces
+                    if file_path.startswith('"') and file_path.endswith('"'):
+                        file_path = file_path[1:-1]
+                    
+                    if 'D' in state:
+                        deleted_files.append(file_path)
+                    else:
+                        modified_files.append(file_path)
 
     # Redact gathered git outputs
     git_status = redact_secrets(git_status)
     git_diff_stat = redact_secrets(git_diff_stat)
 
-    # 2. Write or update target files
     suffix = ".zh-CN.md" if args.lang == "zh" else ".md"
     is_zh = (args.lang == "zh")
     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     session_id = os.environ.get("CONVERSATION_ID") or os.environ.get("SESSION_ID") or "N/A"
 
+    # Build files list details (with physical line counts)
+    changed_table_rows = []
+    handoff_relevant_rows = []
+    
+    if modified_files:
+        for f in modified_files:
+            full_path = os.path.join(target_dir, f)
+            lines_count = get_line_count(full_path)
+            base_name = os.path.basename(f)
+            changed_table_rows.append(f"| {base_name} | [{f}](file://./{f}) | {lines_count} |")
+            handoff_relevant_rows.append(f"| {f} | Modified in this session | {lines_count} | Changed |")
+    else:
+        changed_table_rows.append("| N/A | N/A | N/A |")
+        handoff_relevant_rows.append("| N/A | N/A | N/A | N/A |")
+
+    git_diff_names = "\n".join(changed_table_rows)
+    relevant_files_table = "\n".join(handoff_relevant_rows)
+
+    # Build deleted files warnings
+    if deleted_files:
+        del_list = []
+        if is_zh:
+            del_list.append("> [!WARNING]\n> 检测到以下文件或目录已被删除，请注意在接手开发时同步清理相关引用和引入的模块：\n>")
+        else:
+            del_list.append("> [!WARNING]\n> The following files or folders have been deleted. Ensure all references and imports are cleaned up:\n>")
+        
+        for f in deleted_files:
+            del_list.append(f"> - `{f}`")
+        git_deleted_files = "\n".join(del_list)
+    else:
+        git_deleted_files = "- " + ("None" if not is_zh else "无")
+
+    # 2. Write or update target files
     # Write .ai-context/README.md (.zh-CN.md)
     readme_tpl = load_template("README-template.zh-CN.md" if is_zh else "README-template.md")
     with open(os.path.join(ai_context_dir, f"README{suffix}"), "w", encoding="utf-8") as f:
@@ -196,6 +250,7 @@ def main():
         git_status=git_status,
         git_diff_stat=git_diff_stat,
         git_diff_names=git_diff_names,
+        git_deleted_files=git_deleted_files,
         changes_summary="待确认 / To be confirmed"
     )
     with open(changed_path, "w", encoding="utf-8") as f:
@@ -252,17 +307,20 @@ def main():
     handoff_path = os.path.join(ai_context_dir, f"agent-handoff{suffix}")
     handoff_tpl = load_template("agent-handoff-template.zh-CN.md" if is_zh else "agent-handoff-template.md")
     
-    # Generate relevant files list from Git status if possible
-    rel_files_list = []
-    if is_git and git_diff_names_raw:
-        for f in git_diff_names_raw.splitlines():
-            rel_files_list.append(f"| {f} | Modified in this session | Changed |")
-    else:
-        rel_files_list.append(f"| N/A | N/A | N/A |")
-    relevant_files_table = "\n".join(rel_files_list)
-
     # Render next session focus or fallback to default
     next_session_focus_val = args.focus if args.focus else ("No specific focus given." if not is_zh else "无特定关注焦点。")
+
+    # Generate placeholder for core helper methods to remind developers
+    private_methods_placeholder = (
+        "| N/A | N/A | N/A |" if not is_zh else
+        "| 方法名 | 调用/触发场景 | 作用与数据转换职责 (待 Agent 补充) |"
+    )
+    
+    # Generate placeholder for obsolete legacy code
+    obsolete_code_placeholder = (
+        "- None" if not is_zh else
+        "- 无活动废弃类 (若有 DTO 无外部调用，请在此列出以引导清理)"
+    )
 
     handoff_content = handoff_tpl.format(
         timestamp=now_str,
@@ -277,8 +335,10 @@ def main():
         project_context="自动压缩/打包当前 Coding Agent 上下文" if is_zh else "Automated compression of Coding Agent context",
         tech_stack="Python / Shell / Markdown",
         relevant_files=relevant_files_table,
+        private_methods=private_methods_placeholder,
         completed_work="- Init repo\n- Create templates\n- Implement CLI" if not is_zh else "- 初始化仓库\n- 创建模板\n- 实现 CLI",
         remaining_work="- Validate locally\n- Publish to GitHub" if not is_zh else "- 本地验证\n- 发布到 GitHub",
+        obsolete_code=obsolete_code_placeholder,
         current_errors="None" if not is_zh else "无",
         confirmed_decisions="- Standardized folder layout '.ai-context/'" if not is_zh else "- 标准化 '.ai-context/' 目录结构",
         next_session_focus=next_session_focus_val,
