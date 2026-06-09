@@ -58,6 +58,40 @@ def get_line_count(file_path):
         pass
     return "N/A"
 
+def scan_platform_apis(target_dir):
+    """Scan the codebase for platform specific API references (pure Python implementation)."""
+    apis = {
+        "chrome.storage": "Chrome Extension Storage API",
+        "chrome.runtime": "Chrome Extension Runtime API",
+        "localStorage": "Web Browser Storage API",
+        "process.env": "Node.js Process Environment API",
+        "window.": "Browser DOM Window Reference",
+        "document.": "Browser DOM Document Reference"
+    }
+    results = {k: 0 for k in apis}
+    exclude_dirs = {".git", "node_modules", "__pycache__", "dist", "build", ".venv", "venv", ".ai-context"}
+    valid_extensions = {".js", ".ts", ".html", ".py", ".java", ".json", ".vue", ".jsx", ".tsx"}
+    
+    try:
+        for root, dirs, files in os.walk(target_dir):
+            dirs[:] = [d for d in dirs if d not in exclude_dirs]
+            for f in files:
+                ext = os.path.splitext(f)[1].lower()
+                if ext in valid_extensions:
+                    file_path = os.path.join(root, f)
+                    try:
+                        with open(file_path, 'r', encoding='utf-8', errors='ignore') as file_obj:
+                            content = file_obj.read()
+                            for api in apis:
+                                results[api] += content.count(api)
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+    
+    active_apis = {k: v for k, v in results.items() if v > 0}
+    return active_apis, apis
+
 def extract_markdown_section(content, section_headers):
     """Extract content under specific section headers (e.g. ## Objective or ## 任务目标)."""
     if not content:
@@ -92,6 +126,7 @@ def main():
     parser.add_argument("--lang", choices=["en", "zh"], default="en", help="Language for handoff docs (en or zh)")
     parser.add_argument("--dir", default=".", help="Target directory (default: current directory)")
     parser.add_argument("--focus", default="", help="Focus or objective for the next session/agent")
+    parser.add_argument("--scan", action="store_true", help="Enable platform API and dependency scanning")
     args = parser.parse_args()
 
     target_dir = os.path.abspath(args.dir)
@@ -117,14 +152,12 @@ def main():
         git_log = run_command("git log --oneline -5", cwd=target_dir) or "No commits yet"
         git_commit_sha = run_command("git rev-parse HEAD", cwd=target_dir) or "N/A"
         
-        # Parse porcelain status to categorize modified vs deleted files
         status_raw = run_command("git status --porcelain", cwd=target_dir)
         if status_raw:
             for line in status_raw.splitlines():
                 if len(line) > 2:
                     state = line[:2]
                     file_path = line[2:].strip()
-                    # Strip quotes if filename has spaces
                     if file_path.startswith('"') and file_path.endswith('"'):
                         file_path = file_path[1:-1]
                     
@@ -173,6 +206,31 @@ def main():
         git_deleted_files = "\n".join(del_list)
     else:
         git_deleted_files = "- " + ("None" if not is_zh else "无")
+
+    # Run platform API scan if enabled
+    platform_api_scan_str = ""
+    platform_dependencies_str = ""
+    
+    if args.scan:
+        active_apis, apis_meta = scan_platform_apis(target_dir)
+        if active_apis:
+            scan_rows = []
+            dep_rows = []
+            for api, count in active_apis.items():
+                desc = apis_meta[api]
+                scan_rows.append(f"| `{api}` | {count} | {desc} |")
+                dep_rows.append(f"| `{api}` | {count} | N/A | [Describe alternative solution here] |" if not is_zh else f"| `{api}` | {count} | N/A | [在此描述替代技术方案] |")
+            
+            platform_api_scan_str = "\n".join(scan_rows)
+            platform_dependencies_str = "\n".join(dep_rows)
+        else:
+            msg = "No platform specific API references found." if not is_zh else "未扫描到平台专属 API 引用。"
+            platform_api_scan_str = f"- {msg}"
+            platform_dependencies_str = f"| N/A | N/A | N/A | {msg} |"
+    else:
+        msg = "Scan not enabled. Run CLI with --scan option to check platform coupling." if not is_zh else "扫描未开启。请在 CLI 运行 --scan 参数以启动平台耦合度扫描。"
+        platform_api_scan_str = f"- {msg}"
+        platform_dependencies_str = f"| N/A | N/A | N/A | {msg} |"
 
     # 2. Write or update target files
     # Write .ai-context/README.md (.zh-CN.md)
@@ -251,6 +309,7 @@ def main():
         git_diff_stat=git_diff_stat,
         git_diff_names=git_diff_names,
         git_deleted_files=git_deleted_files,
+        platform_api_scan=platform_api_scan_str,
         changes_summary="待确认 / To be confirmed"
     )
     with open(changed_path, "w", encoding="utf-8") as f:
@@ -336,6 +395,7 @@ def main():
         tech_stack="Python / Shell / Markdown",
         relevant_files=relevant_files_table,
         private_methods=private_methods_placeholder,
+        platform_dependencies=platform_dependencies_str,
         completed_work="- Init repo\n- Create templates\n- Implement CLI" if not is_zh else "- 初始化仓库\n- 创建模板\n- 实现 CLI",
         remaining_work="- Validate locally\n- Publish to GitHub" if not is_zh else "- 本地验证\n- 发布到 GitHub",
         obsolete_code=obsolete_code_placeholder,

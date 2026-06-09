@@ -2,9 +2,21 @@
 
 [English](agent-handoff.md) | [简体中文](agent-handoff.zh-CN.md)
 
+## ⚡ 接手 Agent 推荐阅读优先级
+
+| 优先级 | 章节 | 原因 |
+|:---:|---|---|
+| 1 | **4. 相关模块与文件** | 快速建立物理代码结构认知 |
+| 2 | **10. 已确认结论与核心逻辑摘要** | 理解系统架构设计意图与决策背景 |
+| 3 | **13. 验证命令** | 跑通现有测试，确认开发环境就绪 |
+| 4 | **12. 已知问题与环境约束** | 规避历史坑点与盲目重试离线服务 |
+| 5 | **1. 当前任务 & 11. 下一轮焦点** | 明确接手后应该从哪里开始着手 |
+
+---
+
 ## 📌 交接元数据 (Metadata)
-- **生成时间 (Timestamp)**: 2026-06-09 12:55:22
-- **Git Commit SHA**: 23d26e419fb368a5606b5a2ebd495b04231913a4
+- **生成时间 (Timestamp)**: 2026-06-09 13:09:39
+- **Git Commit SHA**: d65cd884533bfa7460715eed54d68c7be251ee09
 - **会话 / 追踪 ID (Session ID)**: N/A
 
 ---
@@ -12,7 +24,7 @@
 ## 1. 当前任务
 开发/生成 agent-context-handoff Skill
 
-## 2. 当前状态 (运行时状态 - Current State)
+## 2. 当前状态 (运行时状态 - 无相关性项目可跳过)
 - **活动 Agent 分类**:
   - 内置 (Built-in) 模块: 17个 (内置) (请使用描述性断言，避免死记硬编码数字)
   - 动态 (Understand-Anything) 模块: 9个 (理解类)
@@ -30,16 +42,13 @@
 ## 4. 相关模块与文件 (物理行数审计)
 | 文件路径 | 作用 / 职责 | 物理行数 | 当前状态 |
 |---|---|---|---|
-| .ai-context/agent-handoff.zh-CN.md | Modified in this session | 82 | Changed |
-| .ai-context/changed-files.zh-CN.md | Modified in this session | 47 | Changed |
-| .ai-context/current-task.zh-CN.md | Modified in this session | 23 | Changed |
-| agent_context_handoff/SKILL.md | Modified in this session | 88 | Changed |
-| agent_context_handoff/SKILL.zh-CN.md | Modified in this session | 87 | Changed |
-| agent_context_handoff/cli.py | Modified in this session | 376 | Changed |
-| agent_context_handoff/templates/agent-handoff-template.md | Modified in this session | 70 | Changed |
-| agent_context_handoff/templates/agent-handoff-template.zh-CN.md | Modified in this session | 70 | Changed |
-| agent_context_handoff/templates/changed-files-template.md | Modified in this session | 24 | Changed |
-| agent_context_handoff/templates/changed-files-template.zh-CN.md | Modified in this session | 24 | Changed |
+| agent_context_handoff/SKILL.md | Modified in this session | 102 | Changed |
+| agent_context_handoff/SKILL.zh-CN.md | Modified in this session | 88 | Changed |
+| agent_context_handoff/cli.py | Modified in this session | 436 | Changed |
+| agent_context_handoff/templates/agent-handoff-template.md | Modified in this session | 95 | Changed |
+| agent_context_handoff/templates/agent-handoff-template.zh-CN.md | Modified in this session | 95 | Changed |
+| agent_context_handoff/templates/changed-files-template.md | Modified in this session | 27 | Changed |
+| agent_context_handoff/templates/changed-files-template.zh-CN.md | Modified in this session | 27 | Changed |
 | .gitignore | Modified in this session | 110 | Changed |
 | agent-context-handoff-skill-plan.docx | Modified in this session | 341 | Changed |
 
@@ -48,12 +57,25 @@
 |---|---|---|
 | 方法名 | 调用/触发场景 | 作用与数据转换职责 (待 Agent 补充) |
 
-## 6. 本轮已完成内容
+## 6. 跨平台迁移依赖审计 (无相关性项目可跳过)
+| 专属 API / 配置文件 | 引用次数 | 所在文件位置 | 目标平台替代技术方案 |
+|---|:---:|---|---|
+| `chrome.storage` | 1 | N/A | [在此描述替代技术方案] |
+| `chrome.runtime` | 1 | N/A | [在此描述替代技术方案] |
+| `localStorage` | 1 | N/A | [在此描述替代技术方案] |
+| `process.env` | 1 | N/A | [在此描述替代技术方案] |
+| `window.` | 1 | N/A | [在此描述替代技术方案] |
+| `document.` | 1 | N/A | [在此描述替代技术方案] |
+
+## 7. 本轮进度与已完成/未完成清单 (强制状态前缀规范)
+*前缀规则：`✅ 已完成` (代码已存在), `🔄 进行中` (部分代码存在), `📋 规划中` (零代码仅讨论), `⚠️ 受阻` (开发阻塞)*
+
+- **本轮已完成**:
 - 初始化仓库
 - 创建模板
 - 实现 CLI
 
-## 7. 尚未完成内容
+- **尚未完成内容**:
 - 本地验证
 - 发布到 GitHub
 
@@ -67,7 +89,7 @@
 - 标准化 '.ai-context/' 目录结构
 
 ## 11. 下一轮焦点 (Focus for Next Session)
-深度自检测与行数统计优化测试
+缺陷与质量体验升级测试
 
 ## 12. 已知问题与环境约束
 - headroom: [离线] 
@@ -78,8 +100,13 @@
 python3 -m agent_context_handoff.cli --lang zh
 ```
 
-## 14. 给接手 Agent 的要求
-- 在修改任何代码之前，优先阅读根目录下的 `AGENTS.md` 和 `.ai-context/` 目录中的所有上下文文件。
-- 在开始工作前，必须先在对话中复述你对当前任务、已完成进度和下一步计划的理解。
-- 遵循现有的代码风格和规范，除非有明确指示，否则避免大范围的代码重构。
-- 任务修改或完成后，更新 `.ai-context/current-task.md`。
+## 14. 给接手 Agent 的项目特定硬约束
+### 📚 必须阅读的文件
+1. `.ai-context/project.zh-CN.md` — 项目核心设计与评分公式。
+2. `.ai-context/decisions.zh-CN.md` — 关键架构决策背景。
+
+### 🚫 绝对不允许修改的内容
+- 列出工程内高度敏感、绝对不可擅自修改的核心逻辑或配置文件。
+
+### ⚠️ 代码设计陷阱与注意事项
+- 列出具体的耦合陷阱（例如：“修改 A 接口结构会破坏 B 转换，请注意保持结构兼容”）。

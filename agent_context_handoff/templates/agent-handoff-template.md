@@ -2,6 +2,18 @@
 
 [English](agent-handoff.md) | [简体中文](agent-handoff.zh-CN.md)
 
+## ⚡ Recommended Reading Order for Incoming Agent
+
+| Priority | Section | Reason |
+|:---:|---|---|
+| 1 | **4. Relevant Modules & Files** | Establish physical structure understanding |
+| 2 | **10. Confirmed Decisions** | Understand design intent & rationale |
+| 3 | **13. Validation Commands** | Run tests and confirm environment is operational |
+| 4 | **12. Known Issues & Limits** | Avoid stepping into known gotchas/traps |
+| 5 | **1. Current Task & 11. Focus** | Understand what needs to be done next |
+
+---
+
 ## 📌 Handoff Metadata
 - **Generated At**: {timestamp}
 - **Git Commit SHA**: {git_commit_sha}
@@ -12,13 +24,13 @@
 ## 1. Current Task
 {current_task_brief}
 
-## 2. Current State (Runtime Status)
+## 2. Current State (Runtime Status - Skip if N/A)
 - **Active Agent Classifications**:
-  - Built-in Agents: {built_in_agents_count} (Describe classification instead of hardcoded numbers in assertions)
+  - Built-in Agents: {built_in_agents_count} (Use descriptive assertions)
   - Understand-Anything Agents: {understand_anything_count}
 - **MCP Servers Status**:
   - Online MCPs: {online_mcps}
-  - Offline MCPs (e.g. headroom): {offline_mcps} (Do not try to call offline servers)
+  - Offline MCPs (e.g. headroom): {offline_mcps}
 - **Managed Background Screens**:
   - Active screen count: {active_screens}
   - *Prerequisite*: Before attaching via `screen -r`, make sure they are started by invoking `/config` or `/cli` POST endpoint first.
@@ -37,10 +49,18 @@
 |---|---|---|
 {private_methods}
 
-## 6. Work Completed in This Run
+## 6. Platform Dependency Audit (Skip if N/A)
+| API Reference / File | Reference Count | Location | Target Platform Replacement |
+|---|:---:|---|---|
+{platform_dependencies}
+
+## 7. Work Completed / Remaining (Status Prefix Rules Enforced)
+*Use: `✅ Completed` (code exists), `🔄 In Progress` (partial code exists), `📋 Planned` (zero code, design discussion only), `⚠️ Blocked` (stuck).*
+
+- **Completed Progress**:
 {completed_work}
 
-## 7. Work Remaining
+- **Remaining Tasks**:
 {remaining_work}
 
 ## 8. Obsolete / Legacy Code (Orphaned Files)
@@ -63,8 +83,13 @@
 {validation_commands}
 ```
 
-## 14. Requirements for Incoming Agent
-- Read `AGENTS.md` and all files under `.ai-context/` before editing code.
-- Repeat/summarize your understanding of the task, completed progress, and next steps before starting.
-- Maintain project coding standards and avoid unsolicited large refactorings.
-- Update `.ai-context/current-task.md` after completion.
+## 14. Specific Constraints for Incoming Agent
+### 📚 Must-Read Files
+1. `.ai-context/project.md` — Project layout and score definitions.
+2. `.ai-context/decisions.md` — Design intents.
+
+### 🚫 Files Absolutely Cannot Modify
+- Describe files or paths that are highly sensitive and should not be modified (e.g., scoring config, core algorithms).
+
+### ⚠️ Gotchas & Design Traps
+- Describe specific logic traps (e.g., "Changing return structure of X breaks mapping Y").

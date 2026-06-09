@@ -20,5 +20,8 @@
 ## 已删除的文件与目录（清理警告块）
 {git_deleted_files}
 
+## 平台专属 API 引用扫描 (平台耦合审计)
+{platform_api_scan}
+
 ## 变更内容概述
 {changes_summary}

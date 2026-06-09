@@ -20,5 +20,8 @@
 ## Deleted Files & Directories (Clean-up Warnings)
 {git_deleted_files}
 
+## Platform Specific API References Scan (Platform Coupling Audit)
+{platform_api_scan}
+
 ## Summary of Changes
 {changes_summary}
