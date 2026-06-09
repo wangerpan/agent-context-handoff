@@ -1,0 +1,234 @@
+import os
+import sys
+import re
+import argparse
+import subprocess
+
+# Secret stripping regular expressions
+SECRET_PATTERNS = [
+    # API key / token / password assignments in code/text: key = "value"
+    (r'(?i)(api[-_]?key|secret|token|password|pass|passwd|private[-_]?key|credential|auth)\s*[:=]\s*["\']([^"\']{4,})["\']', 
+     r'\1 = "<REDACTED_SECRET>"'),
+    # Generic URLs with passwords, e.g. postgres://user:password@host:port/db
+    (r'([a-zA-Z+.-]+://[^/:]+:)([^/@]+)(@[^/]+)', r'\1<REDACTED_PASSWORD>\3'),
+    # Standard JWT tokens
+    (r'ey[a-zA-Z0-9-_]+\.ey[a-zA-Z0-9-_]+\.[a-zA-Z0-9-_]+', '<REDACTED_TOKEN>'),
+    # Typical SSH private keys
+    (r'-----BEGIN [A-Z]+ PRIVATE KEY-----\n[\s\S]+?\n-----END [A-Z]+ PRIVATE KEY-----', '<REDACTED_PRIVATE_KEY>')
+]
+
+def redact_secrets(content):
+    """Sanitize secrets from content using regex."""
+    sanitized = content
+    for pattern, replacement in SECRET_PATTERNS:
+        sanitized = re.sub(pattern, replacement, sanitized)
+    return sanitized
+
+def run_command(cmd, cwd=None):
+    """Run a shell command and return its output."""
+    try:
+        res = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=cwd)
+        if res.returncode == 0:
+            return res.stdout.strip()
+    except Exception:
+        pass
+    return ""
+
+def load_template(template_name):
+    """Load template content from the package templates directory."""
+    templates_dir = os.path.join(os.path.dirname(__file__), "templates")
+    template_path = os.path.join(templates_dir, template_name)
+    if os.path.exists(template_path):
+        with open(template_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return ""
+
+def main():
+    parser = argparse.ArgumentParser(description="Universal Cross-Agent Context Handoff CLI")
+    parser.add_argument("--lang", choices=["en", "zh"], default="en", help="Language for handoff docs (en or zh)")
+    parser.add_argument("--dir", default=".", help="Target directory (default: current directory)")
+    args = parser.parse_args()
+
+    target_dir = os.path.abspath(args.dir)
+    ai_context_dir = os.path.join(target_dir, ".ai-context")
+    os.makedirs(ai_context_dir, exist_ok=True)
+
+    print(f"Creating/updating AI Context Handoff documentation in: {target_dir}")
+    print(f"Target language: {args.lang.upper()}")
+
+    # 1. Fetch Git info if in a Git repo
+    is_git = os.path.isdir(os.path.join(target_dir, ".git"))
+    git_status = "Not a git repository"
+    git_diff_stat = "N/A"
+    git_diff_names = "N/A"
+    git_log = "N/A"
+
+    if is_git:
+        git_status = run_command("git status --short", cwd=target_dir) or "No changes (clean)"
+        git_diff_stat = run_command("git diff --stat", cwd=target_dir) or "No code changes"
+        git_diff_names_raw = run_command("git diff --name-only", cwd=target_dir)
+        git_log = run_command("git log --oneline -5", cwd=target_dir) or "No commits yet"
+        
+        if git_diff_names_raw:
+            git_diff_names = "\n".join([f"- [{os.path.basename(f)}](file://./{f})" for f in git_diff_names_raw.splitlines()])
+        else:
+            git_diff_names = "- None"
+
+    # Redact gathered git outputs
+    git_status = redact_secrets(git_status)
+    git_diff_stat = redact_secrets(git_diff_stat)
+
+    # 2. Write or update target files
+    suffix = ".zh-CN.md" if args.lang == "zh" else ".md"
+    is_zh = (args.lang == "zh")
+
+    # Write .ai-context/README.md (.zh-CN.md)
+    readme_tpl = load_template("README-template.zh-CN.md" if is_zh else "README-template.md")
+    with open(os.path.join(ai_context_dir, f"README{suffix}"), "w", encoding="utf-8") as f:
+        f.write(readme_tpl)
+
+    # Write or keep .ai-context/project.md
+    proj_path = os.path.join(ai_context_dir, f"project{suffix}")
+    if not os.path.exists(proj_path):
+        proj_tpl = load_template("project-template.zh-CN.md" if is_zh else "project-template.md")
+        proj_content = proj_tpl.format(
+            project_background="待确认 / To be confirmed",
+            tech_stack_details="- Language:\n- Framework:",
+            project_modules="- `/src`: source\n- `/tests`: tests",
+            setup_commands="pip install -r requirements.txt",
+            build_commands="python3 main.py"
+        )
+        with open(proj_path, "w", encoding="utf-8") as f:
+            f.write(proj_content)
+
+    # Write .ai-context/current-task.md
+    task_path = os.path.join(ai_context_dir, f"current-task{suffix}")
+    task_tpl = load_template("current-task-template.zh-CN.md" if is_zh else "current-task-template.md")
+    import datetime
+    now_str = datetime.datetime.now().isoformat()
+    task_content = task_tpl.format(
+        current_task_objective="待确认 / To be confirmed",
+        current_task_status="进行中 / In Progress",
+        start_time=now_str,
+        last_updated=now_str,
+        task_checklist="- [ ] Task 1\n- [ ] Task 2",
+        current_focus="Task 1"
+    )
+    with open(task_path, "w", encoding="utf-8") as f:
+        f.write(task_content)
+
+    # Write .ai-context/changed-files.md
+    changed_path = os.path.join(ai_context_dir, f"changed-files{suffix}")
+    changed_tpl = load_template("changed-files-template.zh-CN.md" if is_zh else "changed-files-template.md")
+    changed_content = changed_tpl.format(
+        git_status=git_status,
+        git_diff_stat=git_diff_stat,
+        git_diff_names=git_diff_names,
+        changes_summary="待确认 / To be confirmed"
+    )
+    with open(changed_path, "w", encoding="utf-8") as f:
+        f.write(changed_content)
+
+    # Write or keep .ai-context/decisions.md
+    dec_path = os.path.join(ai_context_dir, f"decisions{suffix}")
+    if not os.path.exists(dec_path):
+        dec_tpl = load_template("decisions-template.zh-CN.md" if is_zh else "decisions-template.md")
+        dec_content = dec_tpl.format(
+            decision_title="初始化架构决策",
+            decision_context="需要确定跨 Agent 交接的规范形式",
+            decision_details="选择使用标准 Markdown 模板并放在 .ai-context/ 目录下",
+            decision_consequences="所有支持 Markdown 读取的 AI Agent 都可以无感阅读该上下文",
+            decision_status="已批准" if is_zh else "Approved"
+        )
+        with open(dec_path, "w", encoding="utf-8") as f:
+            f.write(dec_content)
+
+    # Write or keep .ai-context/known-issues.md
+    issues_path = os.path.join(ai_context_dir, f"known-issues{suffix}")
+    if not os.path.exists(issues_path):
+        issues_tpl = load_template("known-issues-template.zh-CN.md" if is_zh else "known-issues-template.md")
+        issues_content = issues_tpl.format(
+            active_blockers="- None" if not is_zh else "- 无",
+            historical_traps="- None" if not is_zh else "- 无",
+            env_constraints="- Git CLI needs to be installed" if not is_zh else "- 需在支持 Git 的环境下运行"
+        )
+        with open(issues_path, "w", encoding="utf-8") as f:
+            f.write(issues_content)
+
+    # Write or keep .ai-context/validation.md
+    val_path = os.path.join(ai_context_dir, f"validation{suffix}")
+    if not os.path.exists(val_path):
+        val_tpl = load_template("validation-template.zh-CN.md" if is_zh else "validation-template.md")
+        val_content = val_tpl.format(
+            test_commands="pytest" if not is_zh else "pytest",
+            manual_verification_steps="- Run the application manually and test handoff files" if not is_zh else "- 手动验证生成的上下文文件",
+            last_validation_date=now_str,
+            last_validation_status="Untested" if not is_zh else "未测试",
+            last_validation_output="N/A"
+        )
+        with open(val_path, "w", encoding="utf-8") as f:
+            f.write(val_content)
+
+    # Write .ai-context/next-agent-prompt.md
+    prompt_path = os.path.join(ai_context_dir, f"next-agent-prompt{suffix}")
+    prompt_tpl = load_template("next-agent-prompt-template.zh-CN.md" if is_zh else "next-agent-prompt-template.md")
+    with open(prompt_path, "w", encoding="utf-8") as f:
+        f.write(prompt_tpl)
+
+    # Write .ai-context/agent-handoff.md
+    handoff_path = os.path.join(ai_context_dir, f"agent-handoff{suffix}")
+    handoff_tpl = load_template("agent-handoff-template.zh-CN.md" if is_zh else "agent-handoff-template.md")
+    
+    # Generate relevant files list from Git status if possible
+    rel_files_list = []
+    if is_git and git_diff_names_raw:
+        for f in git_diff_names_raw.splitlines():
+            rel_files_list.append(f"| {f} | Modified in this session | Changed |")
+    else:
+        rel_files_list.append(f"| N/A | N/A | N/A |")
+    relevant_files_table = "\n".join(rel_files_list)
+
+    handoff_content = handoff_tpl.format(
+        current_task_brief="开发/生成 agent-context-handoff Skill" if is_zh else "Develop/generate agent-context-handoff Skill",
+        project_context="自动压缩/打包当前 Coding Agent 上下文" if is_zh else "Automated compression of Coding Agent context",
+        tech_stack="Python / Shell / Markdown",
+        relevant_files=relevant_files_table,
+        completed_work="- Init repo\n- Create templates\n- Implement CLI" if not is_zh else "- 初始化仓库\n- 创建模板\n- 实现 CLI",
+        remaining_work="- Validate locally\n- Publish to GitHub" if not is_zh else "- 本地验证\n- 发布到 GitHub",
+        current_errors="None" if not is_zh else "无",
+        confirmed_decisions="- Standardized folder layout '.ai-context/'" if not is_zh else "- 标准化 '.ai-context/' 目录结构",
+        pending_items="None" if not is_zh else "无",
+        rejected_alternatives="| N/A | N/A |" if not is_zh else "| 无 | 无 |",
+        risks="None" if not is_zh else "无",
+        next_step_suggestions="Run CLI validation tests" if not is_zh else "运行 CLI 验证测试",
+        validation_commands="python3 -m agent_context_handoff.cli --lang zh" if is_zh else "python3 -m agent_context_handoff.cli --lang en"
+    )
+    with open(handoff_path, "w", encoding="utf-8") as f:
+        f.write(handoff_content)
+
+    # 3. Create or update AGENTS.md in target_dir
+    agents_path = os.path.join(target_dir, "AGENTS.md")
+    agents_section_tpl = load_template("agents-section-template.zh-CN.md" if is_zh else "agents-section-template.md")
+
+    # If AGENTS.md doesn't exist, create it. If it does, check if we already have the section
+    needs_section = True
+    if os.path.exists(agents_path):
+        with open(agents_path, "r", encoding="utf-8") as f:
+            existing_content = f.read()
+        if "AI Context Handoff" in existing_content:
+            needs_section = False
+    else:
+        existing_content = "# AI Agents Guide\n\nThis file serves as a guide for AI Coding Agents working on this project."
+
+    if needs_section:
+        updated_content = existing_content + "\n" + agents_section_tpl
+        with open(agents_path, "w", encoding="utf-8") as f:
+            f.write(updated_content)
+        print("Updated AGENTS.md with AI Context Handoff section.")
+    else:
+        print("AGENTS.md already contains AI Context Handoff section. Skipping append.")
+
+    print("Successfully generated context files.")
+
+if __name__ == "__main__":
+    main()
