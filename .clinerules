@@ -9,6 +9,7 @@ Create a universal, tool-agnostic, and clean engineering context handoff package
 Trigger this instruction when any of the following keywords or intents are encountered:
 - `context-handoff` / `agent-handoff` / `handoff`
 - `compress context` / `export context` / `prepare handoff` / `switch agent`
+- `准备切换 Agent` / `交接` / `导出上下文`
 
 ---
 
