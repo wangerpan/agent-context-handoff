@@ -2,6 +2,13 @@
 
 [English](agent-handoff.md) | [简体中文](agent-handoff.zh-CN.md)
 
+## 📌 Handoff Metadata
+- **Generated At**: {timestamp}
+- **Git Commit SHA**: {git_commit_sha}
+- **Session / Trace ID**: {session_id}
+
+---
+
 ## 1. Current Task
 {current_task_brief}
 
@@ -25,29 +32,26 @@
 ## 7. Current Errors / Blockers
 {current_errors}
 
-## 8. Confirmed Decisions
+## 8. Confirmed Decisions & Key Logic Summary
 {confirmed_decisions}
 
-## 9. Pending Items / Clarifications
-{pending_items}
+## 9. Focus for Next Session
+{next_session_focus}
 
-## 10. Rejected Alternatives
+## 10. Known Issues & Environmental Limits
+{known_issues_summary}
+
+## 11. Rejected Alternatives
 | Alternative Approach | Reasons for Rejection |
 |---|---|
 {rejected_alternatives}
 
-## 11. Risks & Cautions
-{risks}
-
-## 12. Suggestions for Next Step
-{next_step_suggestions}
-
-## 13. Validation Commands
+## 12. Validation Commands
 ```bash
 {validation_commands}
 ```
 
-## 14. Requirements for Incoming Agent
+## 13. Requirements for Incoming Agent
 - Read `AGENTS.md` and all files under `.ai-context/` before editing code.
 - Repeat/summarize your understanding of the task, completed progress, and next steps before starting.
 - Maintain project coding standards and avoid unsolicited large refactorings.

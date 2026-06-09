@@ -81,6 +81,7 @@ def main():
     parser = argparse.ArgumentParser(description="Universal Cross-Agent Context Handoff CLI")
     parser.add_argument("--lang", choices=["en", "zh"], default="en", help="Language for handoff docs (en or zh)")
     parser.add_argument("--dir", default=".", help="Target directory (default: current directory)")
+    parser.add_argument("--focus", default="", help="Focus or objective for the next session/agent")
     args = parser.parse_args()
 
     target_dir = os.path.abspath(args.dir)
@@ -96,12 +97,14 @@ def main():
     git_diff_stat = "N/A"
     git_diff_names = "N/A"
     git_log = "N/A"
+    git_commit_sha = "N/A"
 
     if is_git:
         git_status = run_command("git status --short", cwd=target_dir) or "No changes (clean)"
         git_diff_stat = run_command("git diff --stat", cwd=target_dir) or "No code changes"
         git_diff_names_raw = run_command("git diff --name-only", cwd=target_dir)
         git_log = run_command("git log --oneline -5", cwd=target_dir) or "No commits yet"
+        git_commit_sha = run_command("git rev-parse HEAD", cwd=target_dir) or "N/A"
         
         if git_diff_names_raw:
             git_diff_names = "\n".join([f"- [{os.path.basename(f)}](file://./{f})" for f in git_diff_names_raw.splitlines()])
@@ -115,6 +118,8 @@ def main():
     # 2. Write or update target files
     suffix = ".zh-CN.md" if args.lang == "zh" else ".md"
     is_zh = (args.lang == "zh")
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    session_id = os.environ.get("CONVERSATION_ID") or os.environ.get("SESSION_ID") or "N/A"
 
     # Write .ai-context/README.md (.zh-CN.md)
     readme_tpl = load_template("README-template.zh-CN.md" if is_zh else "README-template.md")
@@ -139,10 +144,10 @@ def main():
     task_path = os.path.join(ai_context_dir, f"current-task{suffix}")
     
     # Default initial values
-    task_objective = "待确认 / To be confirmed"
+    task_objective = args.focus if args.focus else "待确认 / To be confirmed"
     task_status = "进行中 / In Progress"
     task_checklist = "- [ ] Task 1\n- [ ] Task 2"
-    task_focus = "Task 1"
+    task_focus = args.focus if args.focus else "Task 1"
     
     # Parse existing file to preserve user modifications
     if os.path.exists(task_path):
@@ -154,26 +159,30 @@ def main():
             ext_checklist = extract_markdown_section(existing_task_content, ["task checklist", "任务清单"])
             ext_focus = extract_markdown_section(existing_task_content, ["current focus", "当前关注焦点"])
             
-            # Simple regex to parse status from: - **Status**: In Progress or - **当前状态**: 进行中
             status_match = re.search(r'-\s*\*\*(?:status|当前状态)\*\*:\s*([^\n\r(]+)', existing_task_content, re.IGNORECASE)
             
-            if ext_objective:
-                task_objective = ext_objective
+            # Prioritize command-line focus over existing file content if provided
+            if args.focus:
+                task_objective = args.focus
+                task_focus = args.focus
+            else:
+                if ext_objective:
+                    task_objective = ext_objective
+                if ext_focus:
+                    task_focus = ext_focus
+
             if ext_checklist:
                 task_checklist = ext_checklist
-            if ext_focus:
-                task_focus = ext_focus
             if status_match:
                 task_status = status_match.group(1).strip()
         except Exception as e:
             print(f"Warning: Failed to parse existing current-task file: {e}")
 
     task_tpl = load_template("current-task-template.zh-CN.md" if is_zh else "current-task-template.md")
-    now_str = datetime.datetime.now().isoformat()
     task_content = task_tpl.format(
         current_task_objective=task_objective,
         current_task_status=task_status,
-        start_time=now_str, # Will be set to run time, could also be extracted in future
+        start_time=now_str,
         last_updated=now_str,
         task_checklist=task_checklist,
         current_focus=task_focus
@@ -201,7 +210,7 @@ def main():
             decision_title="初始化架构决策",
             decision_context="需要确定跨 Agent 交接的规范形式",
             decision_details="选择使用标准 Markdown 模板并放在 .ai-context/ 目录下",
-            decision_consequences="所有支持 Markdown 读取的 AI Agent 都可以无感阅读该上下文",
+            decision_consequences="所有支持 Markdown 读取 of AI Agent 都可以无感阅读该上下文",
             decision_status="已批准" if is_zh else "Approved"
         )
         with open(dec_path, "w", encoding="utf-8") as f:
@@ -252,7 +261,13 @@ def main():
         rel_files_list.append(f"| N/A | N/A | N/A |")
     relevant_files_table = "\n".join(rel_files_list)
 
+    # Render next session focus or fallback to default
+    next_session_focus_val = args.focus if args.focus else ("No specific focus given." if not is_zh else "无特定关注焦点。")
+
     handoff_content = handoff_tpl.format(
+        timestamp=now_str,
+        git_commit_sha=git_commit_sha,
+        session_id=session_id,
         current_task_brief="开发/生成 agent-context-handoff Skill" if is_zh else "Develop/generate agent-context-handoff Skill",
         project_context="自动压缩/打包当前 Coding Agent 上下文" if is_zh else "Automated compression of Coding Agent context",
         tech_stack="Python / Shell / Markdown",
@@ -261,10 +276,9 @@ def main():
         remaining_work="- Validate locally\n- Publish to GitHub" if not is_zh else "- 本地验证\n- 发布到 GitHub",
         current_errors="None" if not is_zh else "无",
         confirmed_decisions="- Standardized folder layout '.ai-context/'" if not is_zh else "- 标准化 '.ai-context/' 目录结构",
-        pending_items="None" if not is_zh else "无",
+        next_session_focus=next_session_focus_val,
+        known_issues_summary="- No active blockers" if not is_zh else "- 无活动阻塞项",
         rejected_alternatives="| N/A | N/A |" if not is_zh else "| 无 | 无 |",
-        risks="None" if not is_zh else "无",
-        next_step_suggestions="Run CLI validation tests" if not is_zh else "运行 CLI 验证测试",
         validation_commands="python3 -m agent_context_handoff.cli --lang zh" if is_zh else "python3 -m agent_context_handoff.cli --lang en"
     )
     with open(handoff_path, "w", encoding="utf-8") as f:
@@ -274,7 +288,6 @@ def main():
     agents_path = os.path.join(target_dir, "AGENTS.md")
     agents_section_tpl = load_template("agents-section-template.zh-CN.md" if is_zh else "agents-section-template.md")
 
-    # If AGENTS.md doesn't exist, create it. If it does, check if we already have the section
     needs_section = True
     if os.path.exists(agents_path):
         with open(agents_path, "r", encoding="utf-8") as f:
