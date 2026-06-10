@@ -2,16 +2,17 @@
 
 请优先阅读以下文件以获取上下文：
 1. 项目根目录下的 `AGENTS.md`
-2. `.ai-context/README.md`
-3. `.ai-context/project.md`
-4. `.ai-context/current-task.md`
-5. `.ai-context/agent-handoff.md`
-6. `.ai-context/changed-files.md`
+2. `.agent_handoff/README.md`
+3. `.agent_handoff/code-map.md`
+4. `.agent_handoff/project.md`
+5. `.agent_handoff/current-task.md`
+6. `.agent_handoff/agent-handoff.md`
+7. `.agent_handoff/changed-files.md`
 
 如有需要，请继续阅读：
-- `.ai-context/decisions.md`
-- `.ai-context/known-issues.md`
-- `.ai-context/validation.md`
+- `.agent_handoff/decisions.md`
+- `.agent_handoff/known-issues.md`
+- `.agent_handoff/validation.md`
 
 在修改任何代码之前，你必须在回复中输出：
 1. 你对当前任务目标的理解

@@ -44,10 +44,15 @@
 |---|---|---|---|
 {relevant_files}
 
-## 5. Core Private & Helper Methods
-| Method Name | Trigger/Invocation | Purpose / Data Transformation Role |
-|---|---|---|
-{private_methods}
+## 5. Critical Code Path & Business Flow (Task-Specific Flowchart & Jump Table)
+```mermaid
+graph TD
+{mermaid_business_flow}
+```
+
+| Step | Node Type | Code Anchor (Click-to-Jump) | Data Transformation & Role |
+|---|---|---|---|
+{business_flow_steps}
 
 ## 6. Platform Dependency Audit (Skip if N/A)
 | API Reference / File | Reference Count | Location | Target Platform Replacement |
@@ -85,8 +90,9 @@
 
 ## 14. Specific Constraints for Incoming Agent
 ### 📚 Must-Read Files
-1. `.ai-context/project.md` — Project layout and score definitions.
-2. `.ai-context/decisions.md` — Design intents.
+1. `.agent_handoff/project.md` — Project layout and specifications.
+2. `.agent_handoff/decisions.md` — Design intents and decisions log.
+3. `.agent_handoff/code-map.md` — Code map and architecture flowcharts.
 
 ### 🚫 Files Absolutely Cannot Modify
 - Describe files or paths that are highly sensitive and should not be modified (e.g., scoring config, core algorithms).
