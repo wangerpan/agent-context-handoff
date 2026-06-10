@@ -15,8 +15,8 @@
 ---
 
 ## 📌 交接元数据 (Metadata)
-- **生成时间 (Timestamp)**: 2026-06-09 13:17:06
-- **Git Commit SHA**: 7771fc696acf4f1f16b7aa3025c7b73df4c87c0d
+- **生成时间 (Timestamp)**: 2026-06-10 20:27:38
+- **Git Commit SHA**: 55565ac449da6031e34fc7f264ac43f6b26d4781
 - **会话 / 追踪 ID (Session ID)**: N/A
 
 ---
@@ -42,24 +42,37 @@
 ## 4. 相关模块与文件 (物理行数审计)
 | 文件路径 | 作用 / 职责 | 物理行数 | 当前状态 |
 |---|---|---|---|
-| .ai-context/agent-handoff.md | Modified in this session | 113 | Changed |
-| .ai-context/changed-files.md | Modified in this session | 56 | Changed |
-| .ai-context/current-task.md | Modified in this session | 22 | Changed |
-| .ai-context/validation.md | Modified in this session | 20 | Changed |
-| .clinerules | Modified in this session | 73 | Changed |
-| .cursorrules | Modified in this session | 73 | Changed |
-| README.md | Modified in this session | 66 | Changed |
-| README.zh-CN.md | Modified in this session | 66 | Changed |
-| agent_context_handoff/SKILL.md | Modified in this session | 102 | Changed |
-| agent_context_handoff/SKILL.zh-CN.md | Modified in this session | 88 | Changed |
-| agent_context_handoff/cli.py | Modified in this session | 576 | Changed |
+| .clinerules | Modified in this session | 80 | Changed |
+| .cursorrules | Modified in this session | 80 | Changed |
+| AGENTS.md | Modified in this session | 11 | Changed |
+| README.md | Modified in this session | 68 | Changed |
+| README.zh-CN.md | Modified in this session | 68 | Changed |
+| agent_context_handoff/SKILL.md | Modified in this session | 107 | Changed |
+| agent_context_handoff/SKILL.zh-CN.md | Modified in this session | 93 | Changed |
+| agent_context_handoff/cli.py | Modified in this session | 687 | Changed |
+| agent_context_handoff/templates/README-template.md | Modified in this session | 17 | Changed |
+| agent_context_handoff/templates/README-template.zh-CN.md | Modified in this session | 17 | Changed |
+| agent_context_handoff/templates/agent-handoff-template.md | Modified in this session | 101 | Changed |
+| agent_context_handoff/templates/agent-handoff-template.zh-CN.md | Modified in this session | 101 | Changed |
+| agent_context_handoff/templates/agents-section-template.md | Modified in this session | 8 | Changed |
+| agent_context_handoff/templates/agents-section-template.zh-CN.md | Modified in this session | 8 | Changed |
+| agent_context_handoff/templates/next-agent-prompt-template.md | Modified in this session | 26 | Changed |
+| agent_context_handoff/templates/next-agent-prompt-template.zh-CN.md | Modified in this session | 26 | Changed |
+| .agent_handoff/ | Modified in this session | N/A | Changed |
 | .gitignore | Modified in this session | 110 | Changed |
 | agent-context-handoff-skill-plan.docx | Modified in this session | 341 | Changed |
+| agent_context_handoff/templates/code-map-template.md | Modified in this session | 15 | Changed |
+| agent_context_handoff/templates/code-map-template.zh-CN.md | Modified in this session | 15 | Changed |
 
-## 5. 核心私有方法与数据流
-| 方法名称 | 调用场景 / 触发 | 职责 / 数据组装作用 |
-|---|---|---|
-| 方法名 | 调用/触发场景 | 作用与数据转换职责 (待 Agent 补充) |
+## 5. 核心业务数据流路径与代码跳转 (Task-Specific Flowchart & Jump Table)
+```mermaid
+graph TD
+  开始[Start] --> 业务处理[Process] --> 结束[End]
+```
+
+| 步骤 | 节点类型 | 代码跳转锚点 (Click-to-Jump) | 数据转换与职责作用 |
+|---|---|---|---|
+| 步骤 1 | 请求入口 | `[cli.py#L190](file://./agent_context_handoff/cli.py#L190)` | CLI 入口执行流 |
 
 ## 6. 跨平台迁移依赖审计 (无相关性项目可跳过)
 | 专属 API / 配置文件 | 引用次数 | 所在文件位置 | 目标平台替代技术方案 |
@@ -91,7 +104,7 @@
 无
 
 ## 10. 已确认结论与核心逻辑摘要
-- 标准化 '.ai-context/' 目录结构
+- 标准化 '.agent_handoff/' 目录结构
 
 ## 11. 下一轮焦点 (Focus for Next Session)
 无特定关注焦点。
@@ -107,8 +120,9 @@ python3 -m agent_context_handoff.cli --lang zh
 
 ## 14. 给接手 Agent 的项目特定硬约束
 ### 📚 必须阅读的文件
-1. `.ai-context/project.zh-CN.md` — 项目核心设计与评分公式。
-2. `.ai-context/decisions.zh-CN.md` — 关键架构决策背景。
+1. `.agent_handoff/project.zh-CN.md` — 项目核心设计与评分公式。
+2. `.agent_handoff/decisions.zh-CN.md` — 关键架构决策背景。
+3. `.agent_handoff/code-map.zh-CN.md` — 项目代码地图与物理调用图谱。
 
 ### 🚫 绝对不允许修改的内容
 - 列出工程内高度敏感、绝对不可擅自修改的核心逻辑或配置文件。

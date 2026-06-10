@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="agent-context-handoff",
-    version="0.1.0",
+    version="0.2.0",
     description="A universal cross-agent engineering context handoff package",
     long_description=open("README.md").read() if open("README.md") else "",
     long_description_content_type="text/markdown",

@@ -9,11 +9,13 @@ A universal, agent-neutral CLI tool and system prompt to pack, strip secrets, an
 ## 📂 Layout
 
 ```
-.ai-context/                # Generated handoff directory
+.agent_handoff/              # Generated handoff directory
+├── packaged-context.xml     # Unified XML context bundle (recommended entry point)
+├── code-map.md              # Project static map (structure & dependencies flowchart)
 ├── README.md               # Folder description
 ├── project.md              # Tech stack & build guidelines
 ├── current-task.md         # Checklist & task state (preserved incrementally)
-├── agent-handoff.md        # Core handoff notes
+├── agent-handoff.md        # Core handoff notes & business flow anchors
 ├── changed-files.md        # Git status & diff summary
 ├── decisions.md            # Architecture decisions log
 ├── known-issues.md         # Gotchas & active blockers
@@ -51,9 +53,9 @@ ai-context-handoff --lang en --scan --test "pytest" --pack
 ai-context-handoff --lang zh --dir /path/to/project --scan --test "pytest" --pack
 ```
 * CLI automatically scans Git status/diff, **preserves customized objectives & checklist** in `current-task.md`, and redacts secrets (tokens, keys, emails, private IPs) into `<REDACTED_SECRET>`.
-* `--scan` parses platform API references and extracts third-party dependencies.
+* `--scan` parses platform API references, extracts third-party dependencies, and generates the static architecture index `code-map.md`.
 * `--test` runs the test suite automatically, logging results in `validation.md`.
-* `--pack` compiles all active markdown context files into a token-efficient XML bundle at `.ai-context/packaged-context.xml` (or `.zh-CN.xml`).
+* `--pack` compiles all active markdown context files into a token-efficient XML bundle at `.agent_handoff/packaged-context.xml` (or `.zh-CN.xml`).
 
 ### Method B: System Instruction Integration
 1. Copy [SKILL.md](agent_context_handoff/SKILL.md) / [SKILL.zh-CN.md](agent_context_handoff/SKILL.zh-CN.md).

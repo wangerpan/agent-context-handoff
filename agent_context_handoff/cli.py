@@ -120,9 +120,9 @@ def scan_platform_apis(target_dir):
 
 
 def package_context(ai_context_dir, target_dir, lang):
-    """Bundle generated language-specific .ai-context files into an XML file."""
+    """Bundle generated language-specific .agent_handoff files into an XML file."""
     suffix = ".zh-CN.md" if lang == "zh" else ".md"
-    xml_parts = [f'<ai_context language="{lang}">']
+    xml_parts = [f'<agent_handoff language="{lang}">']
     
     files_to_pack = []
     try:
@@ -145,7 +145,7 @@ def package_context(ai_context_dir, target_dir, lang):
     except Exception as e:
         print(f"Warning: Failed to scan directory for packaging: {e}")
         
-    xml_parts.append('</ai_context>')
+    xml_parts.append('</agent_handoff>')
     xml_content = "\n".join(xml_parts)
     
     pack_filename = f"packaged-context{suffix.replace('.md', '.xml')}"
@@ -194,11 +194,21 @@ def main():
     parser.add_argument("--focus", default="", help="Focus or objective for the next session/agent")
     parser.add_argument("--scan", action="store_true", help="Enable platform API and dependency scanning")
     parser.add_argument("--test", help="Test command to run for auto-test integration and validation log capture")
-    parser.add_argument("--pack", action="store_true", help="Bundle generated .ai-context files into a single packaged XML file")
+    parser.add_argument("--pack", action="store_true", help="Bundle generated .agent_handoff files into a single packaged XML file")
     args = parser.parse_args()
 
     target_dir = os.path.abspath(args.dir)
-    ai_context_dir = os.path.join(target_dir, ".ai-context")
+    
+    # Auto-migration from old .ai-context to .agent_handoff
+    old_context_dir = os.path.join(target_dir, ".ai-context")
+    ai_context_dir = os.path.join(target_dir, ".agent_handoff")
+    if os.path.exists(old_context_dir) and not os.path.exists(ai_context_dir):
+        print(f"Migrating/renaming old directory {old_context_dir} -> {ai_context_dir}")
+        try:
+            os.rename(old_context_dir, ai_context_dir)
+        except Exception as e:
+            print(f"Warning: Failed to migrate .ai-context directory: {e}")
+            
     os.makedirs(ai_context_dir, exist_ok=True)
 
     print(f"Creating/updating AI Context Handoff documentation in: {target_dir}")
@@ -309,8 +319,104 @@ def main():
         platform_api_scan_str = f"- {msg}"
         platform_dependencies_str = f"| N/A | N/A | N/A | {msg} |"
 
+    # Generate Code Map & Dependency Graph
+    directory_layout = "- None"
+    key_entry_points = "- None"
+    mermaid_dependency_graph = "  Main --> App"
+    
+    if args.scan:
+        exclude_dirs = {".git", "node_modules", "__pycache__", "dist", "build", ".venv", "venv", ".agent_handoff", ".ai-context"}
+        dirs_found = []
+        try:
+            for root, dirs, files in os.walk(target_dir):
+                dirs[:] = [d for d in dirs if d not in exclude_dirs]
+                rel = os.path.relpath(root, target_dir)
+                if rel == "." or any(p.startswith('.') for p in rel.split(os.sep)):
+                    continue
+                file_count = len(files)
+                if file_count > 0:
+                    dirs_found.append(f"- `/{rel}`: Contains {file_count} files.")
+            directory_layout = "\n".join(sorted(dirs_found)) or "- None"
+        except Exception:
+            pass
+
+        symbols = []
+        try:
+            for root, dirs, files in os.walk(target_dir):
+                dirs[:] = [d for d in dirs if d not in exclude_dirs]
+                for f in files:
+                    ext = os.path.splitext(f)[1].lower()
+                    if ext in {".py", ".js", ".ts", ".jsx", ".tsx"}:
+                        file_path = os.path.join(root, f)
+                        rel_path = os.path.relpath(file_path, target_dir)
+                        with open(file_path, 'r', encoding='utf-8', errors='ignore') as file_obj:
+                            lines = file_obj.readlines()
+                        for idx, line in enumerate(lines):
+                            if ext == ".py":
+                                class_match = re.match(r'^\s*class\s+([a-zA-Z0-9_]+)', line)
+                                def_match = re.match(r'^\s*def\s+(main|[a-zA-Z0-9_]+_entry|start|run|init)\s*\(', line)
+                                if class_match:
+                                    symbols.append(f"- **Class**: `{class_match.group(1)}` in [{rel_path}](file://./{rel_path}#L{idx+1})")
+                                elif def_match:
+                                    symbols.append(f"- **Entry Function**: `{def_match.group(1)}()` in [{rel_path}](file://./{rel_path}#L{idx+1})")
+                            elif ext in {".js", ".ts", ".jsx", ".tsx"}:
+                                class_match = re.search(r'\bclass\s+([a-zA-Z0-9_]+)', line)
+                                if class_match:
+                                    symbols.append(f"- **Class**: `{class_match.group(1)}` in [{rel_path}](file://./{rel_path}#L{idx+1})")
+        except Exception:
+            pass
+        key_entry_points = "\n".join(symbols[:20]) or "- None"
+
+        relations = []
+        seen_relations = set()
+        try:
+            for root, dirs, files in os.walk(target_dir):
+                dirs[:] = [d for d in dirs if d not in exclude_dirs]
+                for f in files:
+                    ext = os.path.splitext(f)[1].lower()
+                    if ext in {".py", ".js", ".ts", ".jsx", ".tsx"}:
+                        file_path = os.path.join(root, f)
+                        base_name = os.path.splitext(f)[0]
+                        with open(file_path, 'r', encoding='utf-8', errors='ignore') as file_obj:
+                            content = file_obj.read()
+                        
+                        if ext == ".py":
+                            imports = re.findall(r'^\s*from\s+([a-zA-Z0-9_\.]+)\s+import', content, re.MULTILINE)
+                            imports += re.findall(r'^\s*import\s+([a-zA-Z0-9_\.]+)', content, re.MULTILINE)
+                            for imp in imports:
+                                top_module = imp.split('.')[0]
+                                if os.path.exists(os.path.join(target_dir, top_module)) or os.path.exists(os.path.join(target_dir, top_module + ".py")) or os.path.exists(os.path.join(root, top_module)) or os.path.exists(os.path.join(root, top_module + ".py")):
+                                    if top_module != base_name:
+                                        rel_str = f"  {base_name} --> {top_module}"
+                                        if rel_str not in seen_relations:
+                                            seen_relations.add(rel_str)
+                                            relations.append(rel_str)
+                        elif ext in {".js", ".ts", ".jsx", ".tsx"}:
+                            imports = re.findall(r'\bfrom\s+[\'"]\.*?\/([a-zA-Z0-9_\-\/]+)[\'"]', content)
+                            imports += re.findall(r'\brequire\(\s*[\'"]\.*?\/([a-zA-Z0-9_\-\/]+)[\'"]\s*\)', content)
+                            for imp in imports:
+                                target_base = imp.split('/')[-1]
+                                if target_base != base_name:
+                                    rel_str = f"  {base_name} --> {target_base}"
+                                    if rel_str not in seen_relations:
+                                        seen_relations.add(rel_str)
+                                        relations.append(rel_str)
+        except Exception:
+            pass
+        mermaid_dependency_graph = "\n".join(relations[:15]) or "  Main --> App"
+
+    # Write code-map
+    code_map_tpl = load_template("code-map-template.zh-CN.md" if is_zh else "code-map-template.md")
+    code_map_content = code_map_tpl.format(
+        directory_layout=directory_layout,
+        key_entry_points=key_entry_points,
+        mermaid_dependency_graph=mermaid_dependency_graph
+    )
+    with open(os.path.join(ai_context_dir, f"code-map{suffix}"), "w", encoding="utf-8") as f:
+        f.write(code_map_content)
+
     # 2. Write or update target files
-    # Write .ai-context/README.md (.zh-CN.md)
+    # Write .agent_handoff/README.md (.zh-CN.md)
     readme_tpl = load_template("README-template.zh-CN.md" if is_zh else "README-template.md")
     with open(os.path.join(ai_context_dir, f"README{suffix}"), "w", encoding="utf-8") as f:
         f.write(readme_tpl)
@@ -506,10 +612,14 @@ def main():
     # Render next session focus or fallback to default
     next_session_focus_val = args.focus if args.focus else ("No specific focus given." if not is_zh else "无特定关注焦点。")
 
-    # Generate placeholder for core helper methods to remind developers
-    private_methods_placeholder = (
-        "| N/A | N/A | N/A |" if not is_zh else
-        "| 方法名 | 调用/触发场景 | 作用与数据转换职责 (待 Agent 补充) |"
+    # Generate placeholders for critical path mapping
+    mermaid_business_flow = (
+        "  Start --> Process --> End" if not is_zh else
+        "  开始[Start] --> 业务处理[Process] --> 结束[End]"
+    )
+    business_flow_steps = (
+        "| Step 1 | Entry | `[cli.py#L190](file://./agent_context_handoff/cli.py#L190)` | CLI entry execution pipeline |" if not is_zh else
+        "| 步骤 1 | 请求入口 | `[cli.py#L190](file://./agent_context_handoff/cli.py#L190)` | CLI 入口执行流 |"
     )
     
     # Generate placeholder for obsolete legacy code
@@ -531,13 +641,14 @@ def main():
         project_context="自动压缩/打包当前 Coding Agent 上下文" if is_zh else "Automated compression of Coding Agent context",
         tech_stack="Python / Shell / Markdown",
         relevant_files=relevant_files_table,
-        private_methods=private_methods_placeholder,
+        mermaid_business_flow=mermaid_business_flow,
+        business_flow_steps=business_flow_steps,
         platform_dependencies=platform_dependencies_str,
         completed_work="- Init repo\n- Create templates\n- Implement CLI" if not is_zh else "- 初始化仓库\n- 创建模板\n- 实现 CLI",
         remaining_work="- Validate locally\n- Publish to GitHub" if not is_zh else "- 本地验证\n- 发布到 GitHub",
         obsolete_code=obsolete_code_placeholder,
         current_errors="None" if not is_zh else "无",
-        confirmed_decisions="- Standardized folder layout '.ai-context/'" if not is_zh else "- 标准化 '.ai-context/' 目录结构",
+        confirmed_decisions="- Standardized folder layout '.agent_handoff/'" if not is_zh else "- 标准化 '.agent_handoff/' 目录结构",
         next_session_focus=next_session_focus_val,
         known_issues_summary="- headroom: [OFFLINE] / [离线] \n- No active blockers" if not is_zh else "- headroom: [离线] \n- 无活动阻塞项",
         rejected_alternatives="| N/A | N/A |" if not is_zh else "| 无 | 无 |",

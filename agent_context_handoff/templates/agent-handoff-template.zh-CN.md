@@ -44,10 +44,15 @@
 |---|---|---|---|
 {relevant_files}
 
-## 5. 核心私有方法与数据流
-| 方法名称 | 调用场景 / 触发 | 职责 / 数据组装作用 |
-|---|---|---|
-{private_methods}
+## 5. 核心业务数据流路径与代码跳转 (Task-Specific Flowchart & Jump Table)
+```mermaid
+graph TD
+{mermaid_business_flow}
+```
+
+| 步骤 | 节点类型 | 代码跳转锚点 (Click-to-Jump) | 数据转换与职责作用 |
+|---|---|---|---|
+{business_flow_steps}
 
 ## 6. 跨平台迁移依赖审计 (无相关性项目可跳过)
 | 专属 API / 配置文件 | 引用次数 | 所在文件位置 | 目标平台替代技术方案 |
@@ -85,8 +90,9 @@
 
 ## 14. 给接手 Agent 的项目特定硬约束
 ### 📚 必须阅读的文件
-1. `.ai-context/project.zh-CN.md` — 项目核心设计与评分公式。
-2. `.ai-context/decisions.zh-CN.md` — 关键架构决策背景。
+1. `.agent_handoff/project.zh-CN.md` — 项目核心设计与评分公式。
+2. `.agent_handoff/decisions.zh-CN.md` — 关键架构决策背景。
+3. `.agent_handoff/code-map.zh-CN.md` — 项目代码地图与物理调用图谱。
 
 ### 🚫 绝对不允许修改的内容
 - 列出工程内高度敏感、绝对不可擅自修改的核心逻辑或配置文件。

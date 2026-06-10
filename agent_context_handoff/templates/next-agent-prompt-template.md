@@ -2,16 +2,17 @@ You are taking over an engineering task handed over by another coding agent.
 
 Please first read:
 1. `AGENTS.md` in the project root
-2. `.ai-context/README.md`
-3. `.ai-context/project.md`
-4. `.ai-context/current-task.md`
-5. `.ai-context/agent-handoff.md`
-6. `.ai-context/changed-files.md`
+2. `.agent_handoff/README.md`
+3. `.agent_handoff/code-map.md`
+4. `.agent_handoff/project.md`
+5. `.agent_handoff/current-task.md`
+6. `.agent_handoff/agent-handoff.md`
+7. `.agent_handoff/changed-files.md`
 
 If necessary, continue to read:
-- `.ai-context/decisions.md`
-- `.ai-context/known-issues.md`
-- `.ai-context/validation.md`
+- `.agent_handoff/decisions.md`
+- `.agent_handoff/known-issues.md`
+- `.agent_handoff/validation.md`
 
 Before writing or modifying any code, you MUST output:
 1. Your understanding of the current task

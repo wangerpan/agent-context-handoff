@@ -1,7 +1,7 @@
 # Rule: Agent Context Handoff
 
 ## Description
-Create a universal, tool-agnostic, and clean engineering context handoff package when switching coding agents. When triggered, the agent must compile the project state and write the context to `.ai-context/`.
+Create a universal, tool-agnostic, and clean engineering context handoff package when switching coding agents. When triggered, the agent must compile the project state and write the context to `.agent_handoff/`.
 
 ---
 
@@ -15,7 +15,7 @@ Trigger this instruction when any of the following keywords or intents are encou
 
 ## 📋 Core Instructions
 
-Upon trigger, you MUST classify the project type and perform strict validations before generating or updating the `.ai-context/` directory.
+Upon trigger, you MUST classify the project type and perform strict validations before generating or updating the `.agent_handoff/` directory.
 
 ### 0. Project Type Detection (Conditional Trimming)
 Identify the project type to dynamically exclude irrelevant sections:
@@ -32,6 +32,11 @@ Before writing any handoff documents, you MUST verify all claims against the cod
 3. **Function Validation**: Verify that any helper or private methods documented actually exist in the codebase.
 4. **Platform API Scan**: Audit platform-specific APIs (e.g. `chrome.*`, `localStorage`, `process.env`) to document coupling.
 
+### 0. Continuous Whiteboard Sync & Self-Evolving Rules (Conversational Memory)
+To maintain the context as a living conversation memory:
+1. **Continuous Syncing**: You MUST update `.agent_handoff/current-task.md` (checklists/focus) and `.agent_handoff/decisions.md` (agreed design decisions) immediately in the current turn when progress is made, rather than waiting for the end of the session.
+2. **Self-Evolving Rules**: If you and the developer agree on a new coding standard, design rule, or file constraint during the conversation, you MUST immediately modify `.cursorrules` or `.clinerules` to add the rule, locking it in for future turns of the conversation.
+
 ### 1. Enforced Status Prefixes
 Every checklist item in the task progress sections MUST use one of the following prefixes. Items without prefixes are strictly prohibited:
 - `✅`: Completed (Code exists in workspace and is verified).
@@ -46,7 +51,7 @@ Do NOT write fixed hardcoded numbers for dynamic metrics (e.g., active agent cou
 If the CLI tool is available, execute it first to generate the base context files:
 - For Chinese context: `ai-context-handoff --lang zh --scan --test "pytest" --pack`
 - For English context: `ai-context-handoff --lang en --scan --test "pytest" --pack`
-After execution, manually refine the fields with specific context details. Direct downstream agents to read the packaged XML block (`.ai-context/packaged-context.xml` or `packaged-context.zh-CN.xml`) for token-efficient loading.
+After execution, manually refine the fields with specific context details. Direct downstream agents to read the packaged XML block (`.agent_handoff/packaged-context.xml` or `packaged-context.zh-CN.xml`) for token-efficient loading.
 
 ### 4. Sensitive Data Redaction
 You MUST sanitize all outputs. Replace secrets with:
@@ -61,14 +66,15 @@ You MUST sanitize all outputs. Replace secrets with:
 ---
 
 ## 📂 Target Directory Structure
-Maintain the following files in `.ai-context/` (use `.zh-CN.md` suffix if generating in Chinese):
+Maintain the following files in `.agent_handoff/` (use `.zh-CN.md` suffix if generating in Chinese):
 1. `AGENTS.md` (Project root: append handover index block).
-2. `.ai-context/README.md` (Directory layout and description).
-3. `.ai-context/project.md` (Tech stack, layout, and build instructions).
-4. `.ai-context/current-task.md` (Roadmap and task list. **Preserve custom checklists incrementally**).
-5. `.ai-context/agent-handoff.md` (Core handoff notes, prioritized reading order table, runtime status, public/private helper methods, platform audit table).
-6. `.ai-context/changed-files.md` (Git status snapshot, diff summaries, deleted warnings, and scanned platform APIs).
-7. `.ai-context/decisions.md` (Engineering decision logs).
-8. `.ai-context/known-issues.md` (Blockers, traps, and environment limits).
-9. `.ai-context/validation.md` (Dynamic test commands, manual steps, and execution results).
-10. `.ai-context/next-agent-prompt.md` (Read-first copy-paste instructions for the incoming agent).
+2. `.agent_handoff/README.md` (Directory layout and description).
+3. `.agent_handoff/code-map.md` (Project static map, directory mapping, entry points, and module dependency graph).
+4. `.agent_handoff/project.md` (Tech stack, layout, and build instructions).
+5. `.agent_handoff/current-task.md` (Roadmap and task list. **Preserve custom checklists incrementally**).
+6. `.agent_handoff/agent-handoff.md` (Core handoff notes, prioritized reading order table, runtime status, critical business flow path with file/symbol jump tables, platform audit table).
+7. `.agent_handoff/changed-files.md` (Git status snapshot, diff summaries, deleted warnings, and scanned platform APIs).
+8. `.agent_handoff/decisions.md` (Engineering decision logs).
+9. `.agent_handoff/known-issues.md` (Blockers, traps, and environment limits).
+10. `.agent_handoff/validation.md` (Dynamic test commands, manual steps, and execution results).
+11. `.agent_handoff/next-agent-prompt.md` (Read-first copy-paste instructions for the incoming agent).
