@@ -1,7 +1,5 @@
 # Engineering Decisions Log
 
-[English](decisions.md) | [简体中文](decisions.zh-CN.md)
-
 ## Record of Architecture and Business Logic Decisions
 
 ### [YYYY-MM-DD] {decision_title}

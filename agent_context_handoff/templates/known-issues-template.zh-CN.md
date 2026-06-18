@@ -1,7 +1,5 @@
 # 已知问题与环境约束
 
-[English](known-issues.md) | [简体中文](known-issues.zh-CN.md)
-
 ## 当前阻塞点
 {active_blockers}
 

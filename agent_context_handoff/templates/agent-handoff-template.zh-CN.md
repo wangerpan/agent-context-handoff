@@ -1,7 +1,5 @@
 # Agent 工程上下文交接文档
 
-[English](agent-handoff.md) | [简体中文](agent-handoff.zh-CN.md)
-
 ## 1. 当前任务
 {current_task_brief}
 
@@ -51,4 +49,4 @@
 - 在修改任何代码之前，优先阅读根目录下的 `AGENTS.md` 和 `.ai-context/` 目录中的所有上下文文件。
 - 在开始工作前，必须先在对话中复述你对当前任务、已完成进度和下一步计划的理解。
 - 遵循现有的代码风格和规范，除非有明确指示，否则避免大范围的代码重构。
-- 任务修改或完成后，更新 `.ai-context/current-task.md`。
+- 任务修改或完成后，更新 `.ai-context/current-task.zh-CN.md`。

@@ -1,7 +1,5 @@
 # Agent Project Handoff Documentation
 
-[English](agent-handoff.md) | [简体中文](agent-handoff.zh-CN.md)
-
 ## 1. Current Task
 {current_task_brief}
 

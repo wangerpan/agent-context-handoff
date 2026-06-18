@@ -1,7 +1,5 @@
 # 变更文件摘要
 
-[English](changed-files.md) | [简体中文](changed-files.zh-CN.md)
-
 ## Git 状态快照
 ```
 {git_status}
@@ -14,6 +12,11 @@
 
 ## 已修改文件列表
 {git_diff_names}
+
+## 最近提交
+```
+{git_log}
+```
 
 ## 变更内容概述
 {changes_summary}

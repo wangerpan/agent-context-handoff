@@ -1,7 +1,5 @@
 # Current Task Status
 
-[English](current-task.md) | [简体中文](current-task.zh-CN.md)
-
 ## Objective
 {current_task_objective}
 

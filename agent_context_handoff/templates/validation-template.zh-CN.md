@@ -1,7 +1,5 @@
 # 工程验证方案
 
-[English](validation.md) | [简体中文](validation.zh-CN.md)
-
 ## 自动化测试命令
 执行以下命令以验证工程是否正常运行：
 ```bash

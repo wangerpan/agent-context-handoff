@@ -1,7 +1,5 @@
 # AI Context Directory
 
-[English](README.md) | [简体中文](README.zh-CN.md)
-
 This directory contains current tasks and environment status logs designed for AI Coding Agents.
 
 ## Files Layout
