@@ -54,8 +54,8 @@
 
 ### 4. CLI 工具协同 (推荐优先执行)
 如果当前项目安装了 `agent-context-handoff`，你可以直接在终端中运行以下命令来自动收集 Git 状态、解析变更、执行自动化测试并进行 XML 上下文打包：
-- 中文交接：`ai-context-handoff --lang zh --focus "下阶段任务目标" --scan --test "pytest" --pack`
-- 英文交接：`ai-context-handoff --lang en --focus "Describe the focus" --scan --test "pytest" --pack`
+- 中文交接：`agent-context-handoff --lang zh --focus "下阶段任务目标" --scan --test "pytest" --pack`
+- 英文交接：`agent-context-handoff --lang en --focus "Describe the focus" --scan --test "pytest" --pack`
 
 运行完 CLI 后，您只需手动修改 `.agent_handoff/` 目录下相关文件即可，并引导接手的 Agent 优先读取打包好的 XML 文件（`.agent_handoff/packaged-context.zh-CN.xml`）来极速吸纳上下文。
 

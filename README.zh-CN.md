@@ -47,10 +47,10 @@
 在目标工程根目录下执行：
 ```bash
 # 生成英文版，启用平台与依赖扫描、运行 pytest 测试并打包 XML
-ai-context-handoff --lang en --scan --test "pytest" --pack
+agent-context-handoff --lang en --scan --test "pytest" --pack
 
 # 生成中文版（并指定目录）
-ai-context-handoff --lang zh --dir /path/to/project --scan --test "pytest" --pack
+agent-context-handoff --lang zh --dir /path/to/project --scan --test "pytest" --pack
 ```
 * CLI 工具会自动统计 Git 变更，**智能提取并保留原有的任务清单与目标**，并对敏感信息（API Key、Token、邮箱、内网 IP 等）进行自动脱敏过滤，替换为 `<REDACTED_SECRET>`。
 * `--scan` 会扫描工程中平台专属的 API 引用（如 `chrome.*`），解析第三方包依赖，并生成静态架构索引 `code-map.md`。

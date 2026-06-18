@@ -94,7 +94,7 @@ Codebase Memory MCP 侧重于高性能本地记忆与上下文代理：
   2. 提取更精准的 `Caller -> Callee`（调用者 -> 被调用者）拓扑，将简单的 Mermaid 模块级依赖图升级为**关键业务流时序图**。
 
 ### B. 引入文件哈希与增量扫描机制（借鉴 Codebase Memory MCP）
-* **现状**：每次执行 `ai-context-handoff` 都会重新扫码整个 codebase，对于大型项目耗时较长。
+* **现状**：每次执行 `agent-context-handoff` 都会重新扫码整个 codebase，对于大型项目耗时较长。
 * **改进**：
   1. 在 `.agent_handoff/` 下增设一个轻量级哈希对照表（`.checksums`）。
   2. 每次运行时，仅扫描哈希发生变化的文件，对 `code-map.md` 进行增量刷新，实现亚秒级的极速分析。

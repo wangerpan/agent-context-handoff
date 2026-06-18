@@ -66,10 +66,10 @@ Every generated handoff document must include these fixed sections:
 Do NOT write down fixed numbers for dynamically changing system metrics (e.g., active agent counts, session line counts, or output lists) inside the handoff descriptions or validation instructions. Use **descriptive assertions** (e.g. "Returns list of active agents" instead of "Returns exactly 17 agents").
 
 ### 4. CLI Tool Integration (Recommended)
-If the CLI tool is available in the target workspace (e.g. `ai-context-handoff` or `python3 -m agent_context_handoff.cli`), run it first to automatically generate or update the `.agent_handoff/` directory structure, run tests, and package context:
+If the CLI tool is available in the target workspace (e.g. `agent-context-handoff` or `python3 -m agent_context_handoff.cli`), run it first to automatically generate or update the `.agent_handoff/` directory structure, run tests, and package context:
 ```bash
 # Specifying language, next session focus, enabling code/API scanning, running tests, and XML packaging
-ai-context-handoff --lang en --focus "Next session focus" --scan --test "pytest" --pack
+agent-context-handoff --lang en --focus "Next session focus" --scan --test "pytest" --pack
 ```
 After execution, manually refine the fields with specific context details. Direct downstream agents to read the packaged XML block (`.agent_handoff/packaged-context.xml`) to absorb all context in a single token-efficient step.
 

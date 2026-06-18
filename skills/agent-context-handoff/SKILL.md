@@ -10,7 +10,7 @@ Create an agent-neutral, evidence-based handoff under `.agent_handoff/`. Preserv
 ## Workflow
 
 1. Locate the project root with `git rev-parse --show-toplevel` when Git is available.
-2. Run `ai-context-handoff --dir <project> --lang <en|zh>` to initialize files and refresh the Git snapshot. Use `--force` only when the user explicitly requests replacement of durable context.
+2. Run `agent-context-handoff --dir <project> --lang <en|zh>` to initialize files and refresh the Git snapshot. Use `--force` only when the user explicitly requests replacement of durable context.
 3. Inspect the active conversation, workspace, relevant source files, Git state, and test output.
 4. Refine the durable documents with verified facts. Never invent completed work, decisions, commands, errors, or validation results.
 5. Redact secrets and personal or internal infrastructure data before writing.

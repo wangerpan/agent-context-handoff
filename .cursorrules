@@ -49,8 +49,8 @@ Do NOT write fixed hardcoded numbers for dynamic metrics (e.g., active agent cou
 
 ### 3. CLI Tool Integration (Recommended Flow)
 If the CLI tool is available, execute it first to generate the base context files:
-- For Chinese context: `ai-context-handoff --lang zh --scan --test "pytest" --pack`
-- For English context: `ai-context-handoff --lang en --scan --test "pytest" --pack`
+- For Chinese context: `agent-context-handoff --lang zh --scan --test "pytest" --pack`
+- For English context: `agent-context-handoff --lang en --scan --test "pytest" --pack`
 After execution, manually refine the fields with specific context details. Direct downstream agents to read the packaged XML block (`.agent_handoff/packaged-context.xml` or `packaged-context.zh-CN.xml`) for token-efficient loading.
 
 ### 4. Sensitive Data Redaction

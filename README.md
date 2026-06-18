@@ -47,10 +47,10 @@ A universal, agent-neutral CLI tool and system prompt to pack, strip secrets, an
 Run inside target project root:
 ```bash
 # Generate (Default: English) with Platform & Dependency scanning, Test run, and XML packaging
-ai-context-handoff --lang en --scan --test "pytest" --pack
+agent-context-handoff --lang en --scan --test "pytest" --pack
 
 # Generate in Chinese (Alternative directory)
-ai-context-handoff --lang zh --dir /path/to/project --scan --test "pytest" --pack
+agent-context-handoff --lang zh --dir /path/to/project --scan --test "pytest" --pack
 ```
 * CLI automatically scans Git status/diff, **preserves customized objectives & checklist** in `current-task.md`, and redacts secrets (tokens, keys, emails, private IPs) into `<REDACTED_SECRET>`.
 * `--scan` parses platform API references, extracts third-party dependencies, and generates the static architecture index `code-map.md`.
