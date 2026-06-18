@@ -2,17 +2,17 @@
 
 请优先阅读以下文件以获取上下文：
 1. 项目根目录下的 `AGENTS.md`
-2. `.agent_handoff/README.md`
-3. `.agent_handoff/code-map.md`
-4. `.agent_handoff/project.md`
-5. `.agent_handoff/current-task.md`
-6. `.agent_handoff/agent-handoff.md`
-7. `.agent_handoff/changed-files.md`
+2. `.agent_handoff/README.zh-CN.md`
+3. `.agent_handoff/code-map.zh-CN.md`
+4. `.agent_handoff/project.zh-CN.md`
+5. `.agent_handoff/current-task.zh-CN.md`
+6. `.agent_handoff/agent-handoff.zh-CN.md`
+7. `.agent_handoff/changed-files.zh-CN.md`
 
 如有需要，请继续阅读：
-- `.agent_handoff/decisions.md`
-- `.agent_handoff/known-issues.md`
-- `.agent_handoff/validation.md`
+- `.agent_handoff/decisions.zh-CN.md`
+- `.agent_handoff/known-issues.zh-CN.md`
+- `.agent_handoff/validation.zh-CN.md`
 
 在修改任何代码之前，你必须在回复中输出：
 1. 你对当前任务目标的理解

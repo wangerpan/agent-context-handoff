@@ -7,19 +7,15 @@ import datetime
 
 # Secret stripping regular expressions
 SECRET_PATTERNS = [
-    # API key / token / password assignments in code/text: key = "value"
-    (r'(?i)(api[-_]?key|secret|token|password|pass|passwd|private[-_]?key|credential|auth)\s*[:=]\s*["\']([^"\']{4,})["\']', 
-     r'\1 = "<REDACTED_SECRET>"'),
-    # Generic URLs with passwords, e.g. postgres://user:password@host:port/db
-    (r'([a-zA-Z+.-]+://[^/:]+:)([^/@]+)(@[^/]+)', r'\1<REDACTED_PASSWORD>\3'),
-    # Standard JWT tokens
-    (r'ey[a-zA-Z0-9-_]+\.ey[a-zA-Z0-9-_]+\.[a-zA-Z0-9-_]+', '<REDACTED_TOKEN>'),
-    # Typical SSH private keys
-    (r'-----BEGIN [A-Z]+ PRIVATE KEY-----\n[\s\S]+?\n-----END [A-Z]+ PRIVATE KEY-----', '<REDACTED_PRIVATE_KEY>'),
-    # Email addresses
-    (r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', '<REDACTED_EMAIL>'),
-    # Private IP addresses (10.x.x.x, 172.16.x.x-172.31.x.x, 192.168.x.x)
-    (r'\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b', '<REDACTED_INTERNAL_HOST>')
+    (r'-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]+?-----END [A-Z0-9 ]*PRIVATE KEY-----', '<REDACTED_PRIVATE_KEY>'),
+    (r'([a-zA-Z][a-zA-Z0-9+.-]*://[^\s/:]+:)([^\s/@]+)(@)', r'\1<REDACTED_PASSWORD>\3'),
+    (r'(?i)(authorization\s*:\s*bearer\s+)[^\s`\'\"]+', r'\1<REDACTED_SECRET>'),
+    (r'(?i)(cookie\s*:\s*)[^\r\n]+', r'\1<REDACTED_COOKIE>'),
+    (r'(?i)\b(api[-_]?key|secret|token|password|pass|passwd|private[-_]?key|credential|auth|session[-_]?id)(\s*[:=]\s*)(?:[\'\"])?([^\s\'\"`,;]+)(?:[\'\"])?', r'\1\2<REDACTED_SECRET>'),
+    (r'\bey[a-zA-Z0-9_-]+\.ey[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\b', '<REDACTED_SECRET>'),
+    (r'\b1[3-9]\d{9}\b', '<REDACTED_PHONE>'),
+    (r'\b[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+\b', '<REDACTED_EMAIL>'),
+    (r'\b(?:10(?:\.\d{1,3}){3}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|192\.168(?:\.\d{1,3}){2})\b', '<REDACTED_INTERNAL_HOST>')
 ]
 
 def redact_secrets(content):
@@ -30,13 +26,15 @@ def redact_secrets(content):
     return sanitized
 
 def run_command(cmd, cwd=None):
-    """Run a shell command and return its output."""
+    """Run a command without a shell and return its output."""
     try:
-        res = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=cwd)
+        if isinstance(cmd, str):
+            cmd = cmd.split()
+        res = subprocess.run(cmd, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=cwd)
         if res.returncode == 0:
             return res.stdout.strip()
-    except Exception:
-        pass
+    except OSError as error:
+        print(f"Warning: command failed: {error}", file=sys.stderr)
     return ""
 
 def load_template(template_name):
@@ -46,7 +44,16 @@ def load_template(template_name):
     if os.path.exists(template_path):
         with open(template_path, "r", encoding="utf-8") as f:
             return f.read()
-    return ""
+    raise RuntimeError(f"Required template is unavailable: {template_path}")
+
+
+def write_document(path, content, overwrite=True):
+    """Write a redacted document while respecting durable human-authored files."""
+    if os.path.exists(path) and not overwrite:
+        return False
+    with open(path, "w", encoding="utf-8") as file_obj:
+        file_obj.write(redact_secrets(content))
+    return True
 
 def get_line_count(file_path):
     """Get the physical line count of a file."""
@@ -195,9 +202,16 @@ def main():
     parser.add_argument("--scan", action="store_true", help="Enable platform API and dependency scanning")
     parser.add_argument("--test", help="Test command to run for auto-test integration and validation log capture")
     parser.add_argument("--pack", action="store_true", help="Bundle generated .agent_handoff files into a single packaged XML file")
+    parser.add_argument("--force", action="store_true", help="Replace durable human-authored context documents")
     args = parser.parse_args()
 
     target_dir = os.path.abspath(args.dir)
+    os.makedirs(target_dir, exist_ok=True)
+
+    # Resolve repository subdirectories and worktrees to their actual project root.
+    git_root = run_command(["git", "-C", target_dir, "rev-parse", "--show-toplevel"])
+    if git_root:
+        target_dir = git_root
     
     # Auto-migration from old .ai-context to .agent_handoff
     old_context_dir = os.path.join(target_dir, ".ai-context")
@@ -215,7 +229,7 @@ def main():
     print(f"Target language: {args.lang.upper()}")
 
     # 1. Fetch Git info if in a Git repo
-    is_git = os.path.isdir(os.path.join(target_dir, ".git"))
+    is_git = bool(git_root)
     git_status = "Not a git repository"
     git_diff_stat = "N/A"
     git_log = "N/A"
@@ -226,7 +240,14 @@ def main():
 
     if is_git:
         git_status = run_command("git status --short", cwd=target_dir) or "No changes (clean)"
-        git_diff_stat = run_command("git diff --stat", cwd=target_dir) or "No code changes"
+        unstaged_stat = run_command(["git", "diff", "--stat"], cwd=target_dir)
+        staged_stat = run_command(["git", "diff", "--cached", "--stat"], cwd=target_dir)
+        stat_parts = []
+        if staged_stat:
+            stat_parts.append("Staged:\n" + staged_stat)
+        if unstaged_stat:
+            stat_parts.append("Unstaged:\n" + unstaged_stat)
+        git_diff_stat = "\n\n".join(stat_parts) or "No tracked-file changes"
         git_log = run_command("git log --oneline -5", cwd=target_dir) or "No commits yet"
         git_commit_sha = run_command("git rev-parse HEAD", cwd=target_dir) or "N/A"
         
@@ -412,14 +433,12 @@ def main():
         key_entry_points=key_entry_points,
         mermaid_dependency_graph=mermaid_dependency_graph
     )
-    with open(os.path.join(ai_context_dir, f"code-map{suffix}"), "w", encoding="utf-8") as f:
-        f.write(code_map_content)
+    write_document(os.path.join(ai_context_dir, f"code-map{suffix}"), code_map_content)
 
     # 2. Write or update target files
     # Write .agent_handoff/README.md (.zh-CN.md)
     readme_tpl = load_template("README-template.zh-CN.md" if is_zh else "README-template.md")
-    with open(os.path.join(ai_context_dir, f"README{suffix}"), "w", encoding="utf-8") as f:
-        f.write(readme_tpl)
+    write_document(os.path.join(ai_context_dir, f"README{suffix}"), readme_tpl)
 
     # Write or keep .ai-context/project.md
     proj_path = os.path.join(ai_context_dir, f"project{suffix}")
@@ -432,8 +451,7 @@ def main():
             setup_commands="pip install -r requirements.txt",
             build_commands="python3 main.py"
         )
-        with open(proj_path, "w", encoding="utf-8") as f:
-            f.write(proj_content)
+        write_document(proj_path, proj_content)
 
     # Write or incrementally update .ai-context/current-task.md
     task_path = os.path.join(ai_context_dir, f"current-task{suffix}")
@@ -481,8 +499,8 @@ def main():
         task_checklist=task_checklist,
         current_focus=task_focus
     )
-    with open(task_path, "w", encoding="utf-8") as f:
-        f.write(task_content)
+    if not os.path.exists(task_path) or args.force or args.focus:
+        write_document(task_path, task_content)
 
     # Write .ai-context/changed-files.md
     changed_path = os.path.join(ai_context_dir, f"changed-files{suffix}")
@@ -490,13 +508,13 @@ def main():
     changed_content = changed_tpl.format(
         git_status=git_status,
         git_diff_stat=git_diff_stat,
+        git_log=git_log,
         git_diff_names=git_diff_names,
         git_deleted_files=git_deleted_files,
         platform_api_scan=platform_api_scan_str,
         changes_summary="待确认 / To be confirmed"
     )
-    with open(changed_path, "w", encoding="utf-8") as f:
-        f.write(changed_content)
+    write_document(changed_path, changed_content)
 
     # Write or keep .ai-context/decisions.md
     dec_path = os.path.join(ai_context_dir, f"decisions{suffix}")
@@ -509,8 +527,7 @@ def main():
             decision_consequences="所有支持 Markdown 读取 of AI Agent 都可以无感阅读该上下文",
             decision_status="已批准" if is_zh else "Approved"
         )
-        with open(dec_path, "w", encoding="utf-8") as f:
-            f.write(dec_content)
+        write_document(dec_path, dec_content)
 
     # Write or keep .ai-context/known-issues.md
     issues_path = os.path.join(ai_context_dir, f"known-issues{suffix}")
@@ -522,8 +539,7 @@ def main():
             historical_traps="- None" if not is_zh else "- 无",
             env_constraints="- Git CLI needs to be installed" if not is_zh else "- 需在支持 Git 的环境下运行"
         )
-        with open(issues_path, "w", encoding="utf-8") as f:
-            f.write(issues_content)
+        write_document(issues_path, issues_content)
 
     # Run test command if provided
     test_output = "N/A"
@@ -549,7 +565,7 @@ def main():
     # Write or keep/update .ai-context/validation.md
     val_path = os.path.join(ai_context_dir, f"validation{suffix}")
     
-    if not os.path.exists(val_path):
+    if not os.path.exists(val_path) or args.force:
         val_tpl = load_template("validation-template.zh-CN.md" if is_zh else "validation-template.md")
         val_content = val_tpl.format(
             test_commands=test_cmd_used,
@@ -558,9 +574,8 @@ def main():
             last_validation_status=test_status,
             last_validation_output=test_output
         )
-        with open(val_path, "w", encoding="utf-8") as f:
-            f.write(val_content)
-    else:
+        write_document(val_path, val_content)
+    elif args.test:
         try:
             with open(val_path, "r", encoding="utf-8") as f:
                 content = f.read()
@@ -594,16 +609,14 @@ def main():
             if not replaced:
                 content = content.strip() + "\n\n" + new_results_block
                 
-            with open(val_path, "w", encoding="utf-8") as f:
-                f.write(content)
+            write_document(val_path, content)
         except Exception as e:
             print(f"Warning: Failed to update existing validation file: {e}")
 
     # Write .ai-context/next-agent-prompt.md
     prompt_path = os.path.join(ai_context_dir, f"next-agent-prompt{suffix}")
     prompt_tpl = load_template("next-agent-prompt-template.zh-CN.md" if is_zh else "next-agent-prompt-template.md")
-    with open(prompt_path, "w", encoding="utf-8") as f:
-        f.write(prompt_tpl)
+    write_document(prompt_path, prompt_tpl)
 
     # Write .ai-context/agent-handoff.md
     handoff_path = os.path.join(ai_context_dir, f"agent-handoff{suffix}")
@@ -654,8 +667,7 @@ def main():
         rejected_alternatives="| N/A | N/A |" if not is_zh else "| 无 | 无 |",
         validation_commands="python3 -m agent_context_handoff.cli --lang zh" if is_zh else "python3 -m agent_context_handoff.cli --lang en"
     )
-    with open(handoff_path, "w", encoding="utf-8") as f:
-        f.write(handoff_content)
+    write_document(handoff_path, handoff_content, overwrite=args.force or not os.path.exists(handoff_path))
 
     # 3. Create or update AGENTS.md in target_dir
     agents_path = os.path.join(target_dir, "AGENTS.md")
@@ -672,8 +684,7 @@ def main():
 
     if needs_section:
         updated_content = existing_content + "\n" + agents_section_tpl
-        with open(agents_path, "w", encoding="utf-8") as f:
-            f.write(updated_content)
+        write_document(agents_path, updated_content)
         print("Updated AGENTS.md with AI Context Handoff section.")
     else:
         print("AGENTS.md already contains AI Context Handoff section. Skipping append.")

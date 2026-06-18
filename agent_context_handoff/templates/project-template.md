@@ -1,7 +1,5 @@
 # Project Overview
 
-[English](project.md) | [简体中文](project.zh-CN.md)
-
 ## Background & Description
 {project_background}
 

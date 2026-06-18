@@ -11,7 +11,6 @@ curl -s http://localhost:8000/agents | grep -q "built-in" && echo "PASS: Built-i
 # Run pytest verification
 {test_commands}
 ```
-
 ## Manual Verification Steps
 {manual_verification_steps}
 

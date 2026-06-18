@@ -12,6 +12,11 @@
 {git_diff_stat}
 ```
 
+## Recent Commits
+```
+{git_log}
+```
+
 ## Modified Files (Physical Size Details)
 | File Name | Location Link | Physical Line Count |
 |---|---|---|

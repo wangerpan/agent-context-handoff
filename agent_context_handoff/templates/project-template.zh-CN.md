@@ -1,7 +1,5 @@
 # 项目概览
 
-[English](project.md) | [简体中文](project.zh-CN.md)
-
 ## 项目背景与说明
 {project_background}
 

@@ -1,7 +1,5 @@
 # 技术决策记录
 
-[English](decisions.md) | [简体中文](decisions.zh-CN.md)
-
 ## 架构和业务逻辑决策记录
 
 ### [YYYY-MM-DD] {decision_title}
