@@ -4,26 +4,118 @@ import re
 import argparse
 import subprocess
 import datetime
+import ast
+import hashlib
 
 # Secret stripping regular expressions
 SECRET_PATTERNS = [
-    (r'-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]+?-----END [A-Z0-9 ]*PRIVATE KEY-----', '<REDACTED_PRIVATE_KEY>'),
-    (r'([a-zA-Z][a-zA-Z0-9+.-]*://[^\s/:]+:)([^\s/@]+)(@)', r'\1<REDACTED_PASSWORD>\3'),
-    (r'(?i)(authorization\s*:\s*bearer\s+)[^\s`\'\"]+', r'\1<REDACTED_SECRET>'),
-    (r'(?i)(cookie\s*:\s*)[^\r\n]+', r'\1<REDACTED_COOKIE>'),
-    (r'(?i)\b(api[-_]?key|secret|token|password|pass|passwd|private[-_]?key|credential|auth|session[-_]?id)(\s*[:=]\s*)(?:[\'\"])?([^\s\'\"`,;]+)(?:[\'\"])?', r'\1\2<REDACTED_SECRET>'),
-    (r'\bey[a-zA-Z0-9_-]+\.ey[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\b', '<REDACTED_SECRET>'),
-    (r'\b1[3-9]\d{9}\b', '<REDACTED_PHONE>'),
-    (r'\b[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+\b', '<REDACTED_EMAIL>'),
-    (r'\b(?:10(?:\.\d{1,3}){3}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|192\.168(?:\.\d{1,3}){2})\b', '<REDACTED_INTERNAL_HOST>')
+    (re.compile(r'-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]+?-----END [A-Z0-9 ]*PRIVATE KEY-----'), '<REDACTED_PRIVATE_KEY>'),
+    (re.compile(r'([a-zA-Z][a-zA-Z0-9+.-]*://[^\s/:]+:)([^\s/@]+)(@)'), r'\1<REDACTED_PASSWORD>\3'),
+    (re.compile(r'(?i)(authorization\s*:\s*bearer\s+)[^\s`\'\"]+'), r'\1<REDACTED_SECRET>'),
+    (re.compile(r'(?i)(cookie\s*:\s*)[^\r\n]+'), r'\1<REDACTED_COOKIE>'),
+    (re.compile(r'(?i)\b(api[-_]?key|secret|token|password|pass|passwd|private[-_]?key|credential|auth|session[-_]?id)(\s*[:=]\s*)(?:[\'\"])?([^\s\'\"`,;]+)(?:[\'\"])?'), r'\1\2<REDACTED_SECRET>'),
+    (re.compile(r'\bey[a-zA-Z0-9_-]+\.ey[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\b'), '<REDACTED_SECRET>'),
+    (re.compile(r'\b1[3-9]\d{9}\b'), '<REDACTED_PHONE>'),
+    (re.compile(r'\b[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+\b'), '<REDACTED_EMAIL>'),
+    (re.compile(r'\b(?:10(?:\.\d{1,3}){3}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|192\.168(?:\.\d{1,3}){2})\b'), '<REDACTED_INTERNAL_HOST>')
 ]
 
 def redact_secrets(content):
     """Sanitize secrets from content using regex."""
     sanitized = content
     for pattern, replacement in SECRET_PATTERNS:
-        sanitized = re.sub(pattern, replacement, sanitized)
+        sanitized = pattern.sub(replacement, sanitized)
     return sanitized
+
+
+def read_file_safe(file_path, limit=1024 * 1024):
+    """Read a file up to a size limit (default 1MB) to prevent OOM."""
+    try:
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as file_obj:
+                return file_obj.read(limit)
+    except Exception:
+        pass
+    return ""
+
+
+def get_py_imports_ast(content, file_path="<string>"):
+    """Parse imports using standard library AST module, with regex fallback."""
+    imports = []
+    try:
+        root_node = ast.parse(content, filename=file_path)
+        for node in ast.walk(root_node):
+            if isinstance(node, ast.Import):
+                for name in node.names:
+                    imports.append(name.name)
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    imports.append(node.module)
+    except Exception:
+        # Fallback to regex if AST parsing fails
+        py_import_pat = re.compile(r'^\s*import\s+([a-zA-Z0-9_\.]+)', re.MULTILINE)
+        py_from_pat = re.compile(r'^\s*from\s+([a-zA-Z0-9_\.]+)\s+import', re.MULTILINE)
+        imports = py_import_pat.findall(content) + py_from_pat.findall(content)
+    return imports
+
+
+def get_py_symbols_ast(content, rel_path, file_path="<string>"):
+    """Parse classes and entry functions using standard library AST module, with regex fallback."""
+    symbols = []
+    try:
+        root_node = ast.parse(content, filename=file_path)
+        for node in ast.walk(root_node):
+            if isinstance(node, ast.ClassDef):
+                symbols.append(f"- **Class**: `{node.name}` in [{rel_path}](file:///Users/wangerpan/Desktop/wep/agent-handoff/{rel_path}#L{node.lineno})")
+            elif isinstance(node, ast.FunctionDef):
+                if node.name in {"main", "start", "run", "init"} or node.name.endswith("_entry"):
+                    symbols.append(f"- **Entry Function**: `{node.name}()` in [{rel_path}](file:///Users/wangerpan/Desktop/wep/agent-handoff/{rel_path}#L{node.lineno})")
+    except Exception:
+        # Fallback to regex if syntax error
+        lines = content.splitlines()
+        for idx, line in enumerate(lines):
+            class_match = re.match(r'^\s*class\s+([a-zA-Z0-9_]+)', line)
+            def_match = re.match(r'^\s*def\s+(main|[a-zA-Z0-9_]+_entry|start|run|init)\s*\(', line)
+            if class_match:
+                symbols.append(f"- **Class**: `{class_match.group(1)}` in [{rel_path}](file:///Users/wangerpan/Desktop/wep/agent-handoff/{rel_path}#L{idx+1})")
+            elif def_match:
+                symbols.append(f"- **Entry Function**: `{def_match.group(1)}()` in [{rel_path}](file:///Users/wangerpan/Desktop/wep/agent-handoff/{rel_path}#L{idx+1})")
+    return symbols
+
+
+def calculate_md5(content):
+    """Calculate MD5 hash of string content."""
+    return hashlib.md5(content.encode('utf-8', errors='ignore')).hexdigest()
+
+
+def load_checksums(ai_context_dir):
+    """Load cached checksums from .agent_handoff/.checksums."""
+    checksums_path = os.path.join(ai_context_dir, ".checksums")
+    if os.path.exists(checksums_path):
+        try:
+            with open(checksums_path, "r", encoding="utf-8") as f:
+                checksums = {}
+                for line in f:
+                    parts = line.strip().split(":", 1)
+                    if len(parts) == 2:
+                        checksums[parts[0]] = parts[1]
+                return checksums
+        except Exception:
+            pass
+    return {}
+
+
+def save_checksums(ai_context_dir, checksums):
+    """Save checksums to .agent_handoff/.checksums."""
+    checksums_path = os.path.join(ai_context_dir, ".checksums")
+    try:
+        with open(checksums_path, "w", encoding="utf-8") as f:
+            for k, v in sorted(checksums.items()):
+                f.write(f"{k}:{v}\n")
+    except Exception:
+        pass
+
+
 
 def run_command(cmd, cwd=None):
     """Run a command without a shell and return its output."""
@@ -33,9 +125,21 @@ def run_command(cmd, cwd=None):
         res = subprocess.run(cmd, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=cwd)
         if res.returncode == 0:
             return res.stdout.strip()
+        else:
+            print(f"Warning: command {cmd} failed with exit status {res.returncode}: {res.stderr.strip()}", file=sys.stderr)
     except OSError as error:
         print(f"Warning: command failed: {error}", file=sys.stderr)
     return ""
+
+def run_test_command(cmd_str, cwd=None):
+    """Safely run a test command, avoiding shell=True where possible."""
+    has_shell_metachars = any(char in cmd_str for char in ["&", "|", ";", ">", "<", "*", "?", "$", "`"])
+    if has_shell_metachars:
+        return subprocess.run(cmd_str, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=cwd)
+    else:
+        cmd_args = cmd_str.split()
+        return subprocess.run(cmd_args, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=cwd)
+
 
 def load_template(template_name):
     """Load template content from the package templates directory."""
@@ -96,26 +200,29 @@ def scan_platform_apis(target_dir):
                 if ext in valid_extensions:
                     file_path = os.path.join(root, f)
                     try:
-                        with open(file_path, 'r', encoding='utf-8', errors='ignore') as file_obj:
-                            content = file_obj.read()
-                            # Count platform APIs
-                            for api in apis:
-                                results[api] += content.count(api)
-                            
-                            # Count external dependencies
-                            if ext in {".js", ".ts", ".jsx", ".tsx", ".vue"}:
-                                imports = js_import_pat.findall(content) + js_require_pat.findall(content)
-                                for imp in imports:
-                                    pkg = imp.split('/')[0] if not imp.startswith('@') else '/'.join(imp.split('/')[:2])
-                                    if pkg and pkg not in js_stdlib:
-                                        if not os.path.exists(os.path.join(root, pkg)) and not os.path.exists(os.path.join(target_dir, pkg)):
-                                            dependencies[pkg] = dependencies.get(pkg, 0) + 1
-                            elif ext == ".py":
-                                imports = py_import_pat.findall(content) + py_from_pat.findall(content)
-                                for imp in imports:
-                                    if imp and imp not in py_stdlib:
-                                        if not os.path.exists(os.path.join(root, imp)) and not os.path.exists(os.path.join(root, imp + ".py")) and not os.path.exists(os.path.join(target_dir, imp)) and not os.path.exists(os.path.join(target_dir, imp + ".py")):
-                                            dependencies[imp] = dependencies.get(imp, 0) + 1
+                        content = read_file_safe(file_path)
+                        if not content:
+                            continue
+                        # Count platform APIs
+                        for api in apis:
+                            results[api] += content.count(api)
+                        
+                        # Count external dependencies
+                        if ext in {".js", ".ts", ".jsx", ".tsx", ".vue"}:
+                            imports = js_import_pat.findall(content) + js_require_pat.findall(content)
+                            for imp in imports:
+                                pkg = imp.split('/')[0] if not imp.startswith('@') else '/'.join(imp.split('/')[:2])
+                                if pkg and pkg not in js_stdlib:
+                                    if not os.path.exists(os.path.join(root, pkg)) and not os.path.exists(os.path.join(target_dir, pkg)):
+                                        dependencies[pkg] = dependencies.get(pkg, 0) + 1
+                        elif ext == ".py":
+                            imports = get_py_imports_ast(content, file_path=file_path)
+                            for imp in imports:
+                                # Skip relative imports and stdlib imports
+                                if imp and not imp.startswith('.') and imp not in py_stdlib:
+                                    top_level = imp.split('.')[0]
+                                    if not os.path.exists(os.path.join(root, top_level)) and not os.path.exists(os.path.join(root, top_level + ".py")) and not os.path.exists(os.path.join(target_dir, top_level)) and not os.path.exists(os.path.join(target_dir, top_level + ".py")):
+                                        dependencies[imp] = dependencies.get(imp, 0) + 1
                     except Exception:
                         pass
     except Exception:
@@ -144,7 +251,7 @@ def package_context(ai_context_dir, target_dir, lang):
             rel_path = os.path.relpath(file_path, target_dir)
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
-                    content = f.read()
+                    content = redact_secrets(f.read())
                 escaped = content.replace("]]>", "]]]]><![CDATA[>")
                 xml_parts.append(f'  <file path="{rel_path}">\n    <![CDATA[\n{escaped}\n    ]]>\n  </file>')
             except Exception as e:
@@ -239,7 +346,7 @@ def main():
     deleted_files = []
 
     if is_git:
-        git_status = run_command("git status --short", cwd=target_dir) or "No changes (clean)"
+        git_status = run_command(["git", "status", "--short"], cwd=target_dir) or "No changes (clean)"
         unstaged_stat = run_command(["git", "diff", "--stat"], cwd=target_dir)
         staged_stat = run_command(["git", "diff", "--cached", "--stat"], cwd=target_dir)
         stat_parts = []
@@ -248,10 +355,10 @@ def main():
         if unstaged_stat:
             stat_parts.append("Unstaged:\n" + unstaged_stat)
         git_diff_stat = "\n\n".join(stat_parts) or "No tracked-file changes"
-        git_log = run_command("git log --oneline -5", cwd=target_dir) or "No commits yet"
-        git_commit_sha = run_command("git rev-parse HEAD", cwd=target_dir) or "N/A"
+        git_log = run_command(["git", "log", "--oneline", "-5"], cwd=target_dir) or "No commits yet"
+        git_commit_sha = run_command(["git", "rev-parse", "HEAD"], cwd=target_dir) or "N/A"
         
-        status_raw = run_command("git status --porcelain", cwd=target_dir)
+        status_raw = run_command(["git", "status", "--porcelain"], cwd=target_dir)
         if status_raw:
             for line in status_raw.splitlines():
                 if len(line) > 2:
@@ -345,8 +452,35 @@ def main():
     key_entry_points = "- None"
     mermaid_dependency_graph = "  Main --> App"
     
+    exclude_dirs = {".git", "node_modules", "__pycache__", "dist", "build", ".venv", "venv", ".agent_handoff", ".ai-context"}
+    valid_extensions = {".js", ".ts", ".html", ".py", ".java", ".json", ".vue", ".jsx", ".tsx"}
+    
+    # 1. Compute current MD5 checksums of all source files
+    current_checksums = {}
     if args.scan:
-        exclude_dirs = {".git", "node_modules", "__pycache__", "dist", "build", ".venv", "venv", ".agent_handoff", ".ai-context"}
+        try:
+            for root, dirs, files in os.walk(target_dir):
+                dirs[:] = [d for d in dirs if d not in exclude_dirs]
+                for f in files:
+                    ext = os.path.splitext(f)[1].lower()
+                    if ext in valid_extensions:
+                        file_path = os.path.join(root, f)
+                        rel_path = os.path.relpath(file_path, target_dir)
+                        content_snippet = read_file_safe(file_path)
+                        if content_snippet:
+                            current_checksums[rel_path] = calculate_md5(content_snippet)
+        except Exception:
+            pass
+
+    # 2. Check cached checksums to see if we can skip rebuild
+    cached_checksums = load_checksums(ai_context_dir)
+    code_map_file = os.path.join(ai_context_dir, f"code-map{suffix}")
+    skip_scan = False
+    if args.scan and not args.force and os.path.exists(code_map_file) and current_checksums == cached_checksums:
+        print("No code changes detected (MD5 checksums match). Skipping code-map scan.")
+        skip_scan = True
+
+    if args.scan and not skip_scan:
         dirs_found = []
         try:
             for root, dirs, files in os.walk(target_dir):
@@ -370,26 +504,29 @@ def main():
                     if ext in {".py", ".js", ".ts", ".jsx", ".tsx"}:
                         file_path = os.path.join(root, f)
                         rel_path = os.path.relpath(file_path, target_dir)
-                        with open(file_path, 'r', encoding='utf-8', errors='ignore') as file_obj:
-                            lines = file_obj.readlines()
-                        for idx, line in enumerate(lines):
-                            if ext == ".py":
-                                class_match = re.match(r'^\s*class\s+([a-zA-Z0-9_]+)', line)
-                                def_match = re.match(r'^\s*def\s+(main|[a-zA-Z0-9_]+_entry|start|run|init)\s*\(', line)
-                                if class_match:
-                                    symbols.append(f"- **Class**: `{class_match.group(1)}` in [{rel_path}](file://./{rel_path}#L{idx+1})")
-                                elif def_match:
-                                    symbols.append(f"- **Entry Function**: `{def_match.group(1)}()` in [{rel_path}](file://./{rel_path}#L{idx+1})")
-                            elif ext in {".js", ".ts", ".jsx", ".tsx"}:
+                        content = read_file_safe(file_path)
+                        if not content:
+                            continue
+                        
+                        if ext == ".py":
+                            # Use standard AST scanner for Python
+                            symbols.extend(get_py_symbols_ast(content, rel_path, file_path=file_path))
+                        else:
+                            # Fallback regex for JS/TS
+                            lines = content.splitlines()
+                            for idx, line in enumerate(lines):
                                 class_match = re.search(r'\bclass\s+([a-zA-Z0-9_]+)', line)
                                 if class_match:
-                                    symbols.append(f"- **Class**: `{class_match.group(1)}` in [{rel_path}](file://./{rel_path}#L{idx+1})")
+                                    symbols.append(f"- **Class**: `{class_match.group(1)}` in [{rel_path}](file://{os.path.join(target_dir, rel_path)}#L{idx+1})")
         except Exception:
             pass
         key_entry_points = "\n".join(symbols[:20]) or "- None"
 
         relations = []
         seen_relations = set()
+        js_stdlib = {"path", "fs", "crypto", "http", "os", "child_process", "util", "events", "stream", "url", "querystring", "zlib", "assert", "readline", "process"}
+        py_stdlib = {"os", "sys", "re", "argparse", "subprocess", "datetime", "time", "json", "math", "collections", "shutil", "tempfile", "hashlib", "urllib", "traceback", "logging", "typing", "functools", "abc", "uuid", "io", "pathlib", "random", "ast", "inspect", "unittest"}
+        
         try:
             for root, dirs, files in os.walk(target_dir):
                 dirs[:] = [d for d in dirs if d not in exclude_dirs]
@@ -398,20 +535,21 @@ def main():
                     if ext in {".py", ".js", ".ts", ".jsx", ".tsx"}:
                         file_path = os.path.join(root, f)
                         base_name = os.path.splitext(f)[0]
-                        with open(file_path, 'r', encoding='utf-8', errors='ignore') as file_obj:
-                            content = file_obj.read()
+                        content = read_file_safe(file_path)
+                        if not content:
+                            continue
                         
                         if ext == ".py":
-                            imports = re.findall(r'^\s*from\s+([a-zA-Z0-9_\.]+)\s+import', content, re.MULTILINE)
-                            imports += re.findall(r'^\s*import\s+([a-zA-Z0-9_\.]+)', content, re.MULTILINE)
+                            imports = get_py_imports_ast(content, file_path=file_path)
                             for imp in imports:
-                                top_module = imp.split('.')[0]
-                                if os.path.exists(os.path.join(target_dir, top_module)) or os.path.exists(os.path.join(target_dir, top_module + ".py")) or os.path.exists(os.path.join(root, top_module)) or os.path.exists(os.path.join(root, top_module + ".py")):
-                                    if top_module != base_name:
-                                        rel_str = f"  {base_name} --> {top_module}"
-                                        if rel_str not in seen_relations:
-                                            seen_relations.add(rel_str)
-                                            relations.append(rel_str)
+                                if imp and not imp.startswith('.') and imp not in py_stdlib:
+                                    top_module = imp.split('.')[0]
+                                    if os.path.exists(os.path.join(target_dir, top_module)) or os.path.exists(os.path.join(target_dir, top_module + ".py")) or os.path.exists(os.path.join(root, top_module)) or os.path.exists(os.path.join(root, top_module + ".py")):
+                                        if top_module != base_name:
+                                            rel_str = f"  {base_name} --> {top_module}"
+                                            if rel_str not in seen_relations:
+                                                seen_relations.add(rel_str)
+                                                relations.append(rel_str)
                         elif ext in {".js", ".ts", ".jsx", ".tsx"}:
                             imports = re.findall(r'\bfrom\s+[\'"]\.*?\/([a-zA-Z0-9_\-\/]+)[\'"]', content)
                             imports += re.findall(r'\brequire\(\s*[\'"]\.*?\/([a-zA-Z0-9_\-\/]+)[\'"]\s*\)', content)
@@ -426,14 +564,16 @@ def main():
             pass
         mermaid_dependency_graph = "\n".join(relations[:15]) or "  Main --> App"
 
-    # Write code-map
-    code_map_tpl = load_template("code-map-template.zh-CN.md" if is_zh else "code-map-template.md")
-    code_map_content = code_map_tpl.format(
-        directory_layout=directory_layout,
-        key_entry_points=key_entry_points,
-        mermaid_dependency_graph=mermaid_dependency_graph
-    )
-    write_document(os.path.join(ai_context_dir, f"code-map{suffix}"), code_map_content)
+        # Write code-map and save checksums
+        code_map_tpl = load_template("code-map-template.zh-CN.md" if is_zh else "code-map-template.md")
+        code_map_content = code_map_tpl.format(
+            directory_layout=directory_layout,
+            key_entry_points=key_entry_points,
+            mermaid_dependency_graph=mermaid_dependency_graph
+        )
+        write_document(code_map_file, code_map_content)
+        save_checksums(ai_context_dir, current_checksums)
+
 
     # 2. Write or update target files
     # Write .agent_handoff/README.md (.zh-CN.md)
@@ -521,10 +661,10 @@ def main():
     if not os.path.exists(dec_path):
         dec_tpl = load_template("decisions-template.zh-CN.md" if is_zh else "decisions-template.md")
         dec_content = dec_tpl.format(
-            decision_title="初始化架构决策",
-            decision_context="需要确定跨 Agent 交接的规范形式",
-            decision_details="选择使用标准 Markdown 模板并放在 .ai-context/ 目录下",
-            decision_consequences="所有支持 Markdown 读取 of AI Agent 都可以无感阅读该上下文",
+            decision_title="初始化架构决策" if is_zh else "Initial Architectural Decision",
+            decision_context="需要确定跨 Agent 交接的规范形式" if is_zh else "Need to establish a standardized schema for cross-agent context handoffs",
+            decision_details="选择使用标准 Markdown 模板并放在 .agent_handoff/ 目录下" if is_zh else "Choose to use standardized Markdown templates stored under .agent_handoff/",
+            decision_consequences="所有支持 Markdown 读取 of AI Agent 都可以无感阅读该上下文" if is_zh else "All AI Agents capable of parsing Markdown can read this context without configuration",
             decision_status="已批准" if is_zh else "Approved"
         )
         write_document(dec_path, dec_content)
@@ -550,13 +690,13 @@ def main():
         test_cmd_used = args.test
         print(f"Running automated test: {args.test}...")
         try:
-            res = subprocess.run(args.test, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=target_dir)
+            res = run_test_command(args.test, cwd=target_dir)
             test_output = (res.stdout or "") + "\n" + (res.stderr or "")
             test_output = test_output.strip()
             if res.returncode == 0:
                 test_status = "Passed" if not is_zh else "已通过"
             else:
-                test_status = "Failed" if not is_zh else "失败"
+                test_status = f"Failed (Exit Code: {res.returncode})" if not is_zh else f"失败 (退出码: {res.returncode})"
         except Exception as e:
             test_status = "Failed" if not is_zh else "失败"
             test_output = f"Error executing test command: {e}"

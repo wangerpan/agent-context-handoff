@@ -106,6 +106,57 @@ class CliIntegrationTests(unittest.TestCase):
             ):
                 self.assertIn(name, prompt)
 
+    def test_xml_packaging_redacts_manually_injected_secrets(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir)
+            # 1. Run first pass to generate folders
+            run_cli(target)
+            
+            # 2. Write a manual file with raw secrets
+            custom_doc = target / ".agent_handoff" / "custom-doc.md"
+            custom_doc.write_text("API KEY IS: api-key=leak_this_secret\n", encoding="utf-8")
+            
+            # 3. Pack context
+            result = run_cli(target, "--pack")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            
+            # 4. Verify XML does not contain the raw secret
+            xml_file = target / ".agent_handoff" / "packaged-context.xml"
+            self.assertTrue(xml_file.exists())
+            xml_content = xml_file.read_text(encoding="utf-8")
+            self.assertNotIn("leak_this_secret", xml_content)
+            self.assertIn("<REDACTED_SECRET>", xml_content)
+
+    def test_test_command_execution_failure_captures_exit_code_and_stderr(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir)
+            # Run test with custom Python statement returning exit code 42
+            result = run_cli(target, "--test", f'{sys.executable} -c "import sys; print(\'error log\', file=sys.stderr); sys.exit(42)"')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            
+            val_file = target / ".agent_handoff" / "validation.md"
+            self.assertTrue(val_file.exists())
+            val_content = val_file.read_text(encoding="utf-8")
+            self.assertIn("Failed (Exit Code: 42)", val_content)
+            self.assertIn("error log", val_content)
+
+    def test_incremental_scanning_creates_checksums_and_skips_when_no_changes(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir)
+            # Setup a small python code file
+            (target / "app.py").write_text("class CoreApp:\n    pass\n", encoding="utf-8")
+            
+            # First pass: Build
+            res1 = run_cli(target, "--scan")
+            self.assertEqual(res1.returncode, 0, res1.stderr)
+            checksums_file = target / ".agent_handoff" / ".checksums"
+            self.assertTrue(checksums_file.exists())
+            
+            # Second pass: Check skipped log output
+            res2 = run_cli(target, "--scan")
+            self.assertEqual(res2.returncode, 0, res2.stderr)
+            self.assertIn("Skipping code-map scan", res2.stdout)
+
 
 class RedactionTests(unittest.TestCase):
     def test_redacts_supported_secret_shapes_without_changing_ordinary_text(self):

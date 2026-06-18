@@ -5,7 +5,7 @@ description: Use when transferring an unfinished engineering task to another age
 
 # Agent Context Handoff
 
-Create an agent-neutral, evidence-based handoff under `.ai-context/`. Preserve human-authored context and distinguish verified facts from unknowns.
+Create an agent-neutral, evidence-based handoff under `.agent_handoff/`. Preserve human-authored context and distinguish verified facts from unknowns.
 
 ## Workflow
 
@@ -31,7 +31,7 @@ Chinese runs use language-suffixed filenames such as `agent-handoff.zh-CN.md`.
 - Do not include raw diffs, credentials, cookies, private keys, production connection strings, personal contact data, or sensitive internal hosts.
 - Do not overwrite existing human-authored context during routine refreshes.
 - Regex redaction is defense in depth, not proof of safety. Review the final bundle.
-- Keep `AGENTS.md` short; detailed state belongs in `.ai-context/`.
+- Keep `AGENTS.md` short; detailed state belongs in `.agent_handoff/`.
 
 ## Completion Check
 
