@@ -1,7 +1,5 @@
 # Changed Files Summary
 
-[English](changed-files.md) | [简体中文](changed-files.zh-CN.md)
-
 ## Git Status Snapshot
 ```
 {git_status}

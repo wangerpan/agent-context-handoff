@@ -1,7 +1,5 @@
 # 项目代码地图与架构
 
-[English](code-map.md) | [简体中文](code-map.zh-CN.md)
-
 ## 📂 物理目录结构
 {directory_layout}
 

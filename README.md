@@ -11,6 +11,7 @@ A universal, agent-neutral CLI tool and system prompt to pack, strip secrets, an
 ```
 .agent_handoff/              # Generated handoff directory
 ├── packaged-context.xml     # Unified XML context bundle (recommended entry point)
+├── state.json               # Snapshot branch, commit, timestamp, and language
 ├── code-map.md              # Project static map (structure & dependencies flowchart)
 ├── README.md               # Folder description
 ├── project.md              # Tech stack & build guidelines
@@ -51,11 +52,21 @@ agent-context-handoff --lang en --scan --test "pytest" --pack
 
 # Generate in Chinese (Alternative directory)
 agent-context-handoff --lang zh --dir /path/to/project --scan --test "pytest" --pack
+
+# Check freshness and content safety; use --json in automation
+agent-context-handoff lint --dir /path/to/project
+
+# Check installation and handoff health
+agent-context-handoff doctor --dir /path/to/project
 ```
 * CLI automatically scans Git status/diff, **preserves customized objectives & checklist** in `current-task.md`, and redacts secrets (tokens, keys, emails, private IPs) into `<REDACTED_SECRET>`.
 * `--scan` parses platform API references, extracts third-party dependencies, and generates the static architecture index `code-map.md`.
-* `--test` runs the test suite automatically, logging results in `validation.md`.
-* `--pack` compiles all active markdown context files into a token-efficient XML bundle at `.agent_handoff/packaged-context.xml` (or `.zh-CN.xml`).
+* `--mode analysis|fix|review|handoff` tailors the incoming-agent prompt to the authorized work mode.
+* `--refresh` updates generated task metadata while preserving the objective, checklist, and focus written by humans or agents.
+* `lint` detects stale branch/commit/timestamps, obsolete `.ai-context` references, non-portable links, and unverified example claims. `doctor` adds CLI version and environment health.
+* `--test` runs the supplied string through the local shell and logs results in `validation.md`. Treat it as trusted local input; never pass untrusted text.
+* `--pack` compiles all active markdown context files into a token-efficient, redacted XML bundle at `.agent_handoff/packaged-context.xml` (or `.zh-CN.xml`).
+* Redaction is defense in depth, not proof of safety. Review the final bundle before sharing it outside its trust boundary.
 
 ### Method B: System Instruction Integration
 1. Copy [SKILL.md](agent_context_handoff/SKILL.md) / [SKILL.zh-CN.md](agent_context_handoff/SKILL.zh-CN.md).

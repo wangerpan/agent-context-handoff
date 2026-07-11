@@ -1,5 +1,7 @@
 你正在接手一个由其他 Coding Agent 交接过来的工程任务。
 
+**工作模式**：{mode_instruction}
+
 请优先阅读以下文件以获取上下文：
 1. 项目根目录下的 `AGENTS.md`
 2. `.agent_handoff/README.zh-CN.md`

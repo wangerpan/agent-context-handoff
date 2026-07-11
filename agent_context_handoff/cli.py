@@ -6,6 +6,19 @@ import subprocess
 import datetime
 import ast
 import hashlib
+import json
+from dataclasses import dataclass
+import shlex
+
+from agent_context_handoff import __version__
+
+
+EXCLUDED_SCAN_DIRS = {
+    ".agent_handoff", ".ai-context", ".git", ".venv", "venv", "__pycache__",
+    "node_modules", "target", "build", "dist", "logs", ".codegraph",
+    ".sisyphus", ".codefree", ".codefree-output", "coverage", ".pytest_cache",
+}
+LINT_CLAIMS = ("Publish to GitHub", "No active blockers")
 
 # Secret stripping regular expressions
 SECRET_PATTERNS = [
@@ -26,7 +39,6 @@ def redact_secrets(content):
     for pattern, replacement in SECRET_PATTERNS:
         sanitized = pattern.sub(replacement, sanitized)
     return sanitized
-
 
 def read_file_safe(file_path, limit=1024 * 1024):
     """Read a file up to a size limit (default 1MB) to prevent OOM."""
@@ -66,10 +78,10 @@ def get_py_symbols_ast(content, rel_path, file_path="<string>"):
         root_node = ast.parse(content, filename=file_path)
         for node in ast.walk(root_node):
             if isinstance(node, ast.ClassDef):
-                symbols.append(f"- **Class**: `{node.name}` in [{rel_path}](file:///Users/wangerpan/Desktop/wep/agent-handoff/{rel_path}#L{node.lineno})")
+                symbols.append(f"- **Class**: `{node.name}` in [{rel_path}](../{rel_path}#L{node.lineno})")
             elif isinstance(node, ast.FunctionDef):
                 if node.name in {"main", "start", "run", "init"} or node.name.endswith("_entry"):
-                    symbols.append(f"- **Entry Function**: `{node.name}()` in [{rel_path}](file:///Users/wangerpan/Desktop/wep/agent-handoff/{rel_path}#L{node.lineno})")
+                    symbols.append(f"- **Entry Function**: `{node.name}()` in [{rel_path}](../{rel_path}#L{node.lineno})")
     except Exception:
         # Fallback to regex if syntax error
         lines = content.splitlines()
@@ -77,9 +89,9 @@ def get_py_symbols_ast(content, rel_path, file_path="<string>"):
             class_match = re.match(r'^\s*class\s+([a-zA-Z0-9_]+)', line)
             def_match = re.match(r'^\s*def\s+(main|[a-zA-Z0-9_]+_entry|start|run|init)\s*\(', line)
             if class_match:
-                symbols.append(f"- **Class**: `{class_match.group(1)}` in [{rel_path}](file:///Users/wangerpan/Desktop/wep/agent-handoff/{rel_path}#L{idx+1})")
+                symbols.append(f"- **Class**: `{class_match.group(1)}` in [{rel_path}](../{rel_path}#L{idx+1})")
             elif def_match:
-                symbols.append(f"- **Entry Function**: `{def_match.group(1)}()` in [{rel_path}](file:///Users/wangerpan/Desktop/wep/agent-handoff/{rel_path}#L{idx+1})")
+                symbols.append(f"- **Entry Function**: `{def_match.group(1)}()` in [{rel_path}](../{rel_path}#L{idx+1})")
     return symbols
 
 
@@ -116,19 +128,37 @@ def save_checksums(ai_context_dir, checksums):
         pass
 
 
+@dataclass(frozen=True)
+class CommandResult:
+    args: tuple
+    returncode: int
+    stdout: str
+    stderr: str
+
+    @property
+    def ok(self):
+        return self.returncode == 0
+
 
 def run_command(cmd, cwd=None):
-    """Run a command without a shell and return its output."""
+    """Run a command without a shell and retain stdout, stderr, and status."""
+    args = shlex.split(cmd) if isinstance(cmd, str) else list(cmd)
     try:
-        if isinstance(cmd, str):
-            cmd = cmd.split()
-        res = subprocess.run(cmd, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=cwd)
-        if res.returncode == 0:
-            return res.stdout.strip()
-        else:
-            print(f"Warning: command {cmd} failed with exit status {res.returncode}: {res.stderr.strip()}", file=sys.stderr)
+        res = subprocess.run(args, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=cwd)
+        return CommandResult(tuple(args), res.returncode, res.stdout.strip(), res.stderr.strip())
     except OSError as error:
-        print(f"Warning: command failed: {error}", file=sys.stderr)
+        return CommandResult(tuple(args), 127, "", str(error))
+
+
+def command_output(cmd, cwd=None, report_error=True):
+    """Return successful stdout and surface failures instead of treating them as empty state."""
+    result = run_command(cmd, cwd=cwd)
+    if result.ok:
+        return result.stdout
+    if report_error:
+        command = " ".join(result.args)
+        detail = result.stderr or f"exit code {result.returncode}"
+        print(f"Warning: command failed ({result.returncode}): {command}: {detail}", file=sys.stderr)
     return ""
 
 def run_test_command(cmd_str, cwd=None):
@@ -159,6 +189,112 @@ def write_document(path, content, overwrite=True):
         file_obj.write(redact_secrets(content))
     return True
 
+
+def resolve_target_dir(path):
+    """Return the Git root when available, otherwise the absolute input path."""
+    target_dir = os.path.abspath(path)
+    git_root = command_output(
+        ["git", "-C", target_dir, "rev-parse", "--show-toplevel"],
+        report_error=False,
+    )
+    return git_root or target_dir
+
+
+def lint_handoff(target_dir):
+    """Return actionable findings for stale or unsafe handoff artifacts."""
+    target_dir = resolve_target_dir(target_dir)
+    context_dir = os.path.join(target_dir, ".agent_handoff")
+    findings = []
+    if not os.path.isdir(context_dir):
+        return [{"code": "missing-handoff", "path": ".agent_handoff", "message": "Handoff directory does not exist."}]
+
+    state_path = os.path.join(context_dir, "state.json")
+    state = {}
+    if os.path.exists(state_path):
+        try:
+            with open(state_path, "r", encoding="utf-8") as file_obj:
+                state = json.load(file_obj)
+        except (OSError, ValueError) as error:
+            findings.append({"code": "invalid-state", "path": ".agent_handoff/state.json", "message": str(error)})
+    else:
+        findings.append({"code": "missing-state", "path": ".agent_handoff/state.json", "message": "Regenerate the handoff to add freshness metadata."})
+
+    generated_at = state.get("generated_at")
+    if generated_at:
+        try:
+            generated_time = datetime.datetime.fromisoformat(generated_at.replace("Z", "+00:00"))
+            if generated_time.tzinfo is None:
+                generated_time = generated_time.replace(tzinfo=datetime.timezone.utc)
+            age = datetime.datetime.now(datetime.timezone.utc) - generated_time
+            if age > datetime.timedelta(days=7):
+                findings.append({"code": "stale-timestamp", "path": ".agent_handoff/state.json", "message": "Handoff snapshot is older than seven days."})
+        except (TypeError, ValueError):
+            findings.append({"code": "invalid-timestamp", "path": ".agent_handoff/state.json", "message": "generated_at is not a valid ISO-8601 timestamp."})
+
+    current_commit = command_output(["git", "-C", target_dir, "rev-parse", "HEAD"], report_error=False)
+    current_branch = command_output(["git", "-C", target_dir, "branch", "--show-current"], report_error=False)
+    if current_commit and state.get("git_commit") not in (None, "N/A", current_commit):
+        findings.append({"code": "stale-commit", "path": ".agent_handoff/state.json", "message": "Handoff commit differs from HEAD."})
+    if current_branch and state.get("git_branch") not in (None, "N/A", current_branch):
+        findings.append({"code": "stale-branch", "path": ".agent_handoff/state.json", "message": "Handoff branch differs from the current branch."})
+
+    for root, dirs, files in os.walk(context_dir):
+        dirs[:] = [name for name in dirs if name not in EXCLUDED_SCAN_DIRS]
+        for name in files:
+            if not (name.endswith(".md") or name.endswith(".xml")):
+                continue
+            path = os.path.join(root, name)
+            try:
+                with open(path, "r", encoding="utf-8", errors="ignore") as file_obj:
+                    content = file_obj.read()
+            except OSError:
+                continue
+            rel_path = os.path.relpath(path, target_dir)
+            if ".ai-context" in content:
+                findings.append({"code": "obsolete-path", "path": rel_path, "message": "Replace .ai-context with .agent_handoff."})
+            if "file://" in content:
+                findings.append({"code": "nonportable-link", "path": rel_path, "message": "Replace file:// links with relative Markdown links."})
+            if any(claim in content for claim in LINT_CLAIMS):
+                findings.append({"code": "unverified-claim", "path": rel_path, "message": "Remove example completion or blocker claims unless verified."})
+    return findings
+
+
+def print_health_report(action, target_dir, as_json):
+    """Print lint or doctor output and return a process exit code."""
+    target_dir = resolve_target_dir(target_dir)
+    findings = lint_handoff(target_dir)
+    if action == "doctor":
+        report = {
+            "version": __version__,
+            "target_dir": target_dir,
+            "git_available": bool(command_output(["git", "--version"], report_error=False)),
+            "handoff_exists": os.path.isdir(os.path.join(target_dir, ".agent_handoff")),
+            "findings": findings,
+        }
+    else:
+        report = {"target_dir": target_dir, "findings": findings}
+    if as_json:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+    else:
+        print(f"{action}: {len(findings)} finding(s)")
+        for finding in findings:
+            print(f"- [{finding['code']}] {finding['path']}: {finding['message']}")
+    return 1 if findings else 0
+
+
+def update_agents_handoff_section(existing_content, rendered_section):
+    """Replace the managed or legacy handoff section while preserving local rules."""
+    managed = re.compile(
+        r"(?ms)^<!-- agent-context-handoff:start -->.*?^<!-- agent-context-handoff:end -->\s*"
+    )
+    legacy = re.compile(r"(?ms)^## AI Context Handoff[^\n]*\n.*?(?=^## |\Z)")
+    replacement = rendered_section.strip() + "\n\n"
+    if managed.search(existing_content):
+        return managed.sub(replacement, existing_content, count=1).rstrip() + "\n"
+    if legacy.search(existing_content):
+        return legacy.sub(replacement, existing_content, count=1).rstrip() + "\n"
+    return existing_content.rstrip() + "\n\n" + replacement
+
 def get_line_count(file_path):
     """Get the physical line count of a file."""
     try:
@@ -180,7 +316,7 @@ def scan_platform_apis(target_dir):
         "document.": "Browser DOM Document Reference"
     }
     results = {k: 0 for k in apis}
-    exclude_dirs = {".git", "node_modules", "__pycache__", "dist", "build", ".venv", "venv", ".ai-context"}
+    exclude_dirs = EXCLUDED_SCAN_DIRS
     valid_extensions = {".js", ".ts", ".html", ".py", ".java", ".json", ".vue", ".jsx", ".tsx"}
     
     dependencies = {}
@@ -265,8 +401,7 @@ def package_context(ai_context_dir, target_dir, lang):
     pack_filename = f"packaged-context{suffix.replace('.md', '.xml')}"
     pack_path = os.path.join(ai_context_dir, pack_filename)
     try:
-        with open(pack_path, "w", encoding="utf-8") as f:
-            f.write(xml_content)
+        write_document(pack_path, xml_content)
         print(f"Bundled active context files into: {pack_path}")
     except Exception as e:
         print(f"Error writing packaged context file: {e}")
@@ -303,6 +438,7 @@ def extract_markdown_section(content, section_headers):
 
 def main():
     parser = argparse.ArgumentParser(description="Universal Cross-Agent Context Handoff CLI")
+    parser.add_argument("action", nargs="?", choices=["generate", "lint", "doctor"], default="generate")
     parser.add_argument("--lang", choices=["en", "zh"], default="en", help="Language for handoff docs (en or zh)")
     parser.add_argument("--dir", default=".", help="Target directory (default: current directory)")
     parser.add_argument("--focus", default="", help="Focus or objective for the next session/agent")
@@ -310,13 +446,22 @@ def main():
     parser.add_argument("--test", help="Test command to run for auto-test integration and validation log capture")
     parser.add_argument("--pack", action="store_true", help="Bundle generated .agent_handoff files into a single packaged XML file")
     parser.add_argument("--force", action="store_true", help="Replace durable human-authored context documents")
+    parser.add_argument("--refresh", action="store_true", help="Refresh generated task metadata while preserving human-authored sections")
+    parser.add_argument("--mode", choices=["analysis", "fix", "review", "handoff"], default="handoff", help="Operating mode for the incoming agent prompt")
+    parser.add_argument("--json", action="store_true", help="Emit machine-readable output for lint or doctor")
     args = parser.parse_args()
 
     target_dir = os.path.abspath(args.dir)
     os.makedirs(target_dir, exist_ok=True)
 
+    if args.action in {"lint", "doctor"}:
+        raise SystemExit(print_health_report(args.action, target_dir, args.json))
+
     # Resolve repository subdirectories and worktrees to their actual project root.
-    git_root = run_command(["git", "-C", target_dir, "rev-parse", "--show-toplevel"])
+    git_root = command_output(
+        ["git", "-C", target_dir, "rev-parse", "--show-toplevel"],
+        report_error=False,
+    )
     if git_root:
         target_dir = git_root
     
@@ -346,19 +491,19 @@ def main():
     deleted_files = []
 
     if is_git:
-        git_status = run_command(["git", "status", "--short"], cwd=target_dir) or "No changes (clean)"
-        unstaged_stat = run_command(["git", "diff", "--stat"], cwd=target_dir)
-        staged_stat = run_command(["git", "diff", "--cached", "--stat"], cwd=target_dir)
+        git_status = command_output("git status --short", cwd=target_dir) or "No changes (clean)"
+        unstaged_stat = command_output(["git", "diff", "--stat"], cwd=target_dir)
+        staged_stat = command_output(["git", "diff", "--cached", "--stat"], cwd=target_dir)
         stat_parts = []
         if staged_stat:
             stat_parts.append("Staged:\n" + staged_stat)
         if unstaged_stat:
             stat_parts.append("Unstaged:\n" + unstaged_stat)
         git_diff_stat = "\n\n".join(stat_parts) or "No tracked-file changes"
-        git_log = run_command(["git", "log", "--oneline", "-5"], cwd=target_dir) or "No commits yet"
-        git_commit_sha = run_command(["git", "rev-parse", "HEAD"], cwd=target_dir) or "N/A"
+        git_log = command_output("git log --oneline -5", cwd=target_dir) or "No commits yet"
+        git_commit_sha = command_output("git rev-parse HEAD", cwd=target_dir) or "N/A"
         
-        status_raw = run_command(["git", "status", "--porcelain"], cwd=target_dir)
+        status_raw = command_output("git status --porcelain", cwd=target_dir)
         if status_raw:
             for line in status_raw.splitlines():
                 if len(line) > 2:
@@ -390,7 +535,7 @@ def main():
             full_path = os.path.join(target_dir, f)
             lines_count = get_line_count(full_path)
             base_name = os.path.basename(f)
-            changed_table_rows.append(f"| {base_name} | [{f}](file://./{f}) | {lines_count} |")
+            changed_table_rows.append(f"| {base_name} | [{f}](../{f}) | {lines_count} |")
             handoff_relevant_rows.append(f"| {f} | Modified in this session | {lines_count} | Changed |")
     else:
         changed_table_rows.append("| N/A | N/A | N/A |")
@@ -452,7 +597,7 @@ def main():
     key_entry_points = "- None"
     mermaid_dependency_graph = "  Main --> App"
     
-    exclude_dirs = {".git", "node_modules", "__pycache__", "dist", "build", ".venv", "venv", ".agent_handoff", ".ai-context"}
+    exclude_dirs = EXCLUDED_SCAN_DIRS
     valid_extensions = {".js", ".ts", ".html", ".py", ".java", ".json", ".vue", ".jsx", ".tsx"}
     
     # 1. Compute current MD5 checksums of all source files
@@ -517,7 +662,7 @@ def main():
                             for idx, line in enumerate(lines):
                                 class_match = re.search(r'\bclass\s+([a-zA-Z0-9_]+)', line)
                                 if class_match:
-                                    symbols.append(f"- **Class**: `{class_match.group(1)}` in [{rel_path}](file://{os.path.join(target_dir, rel_path)}#L{idx+1})")
+                                    symbols.append(f"- **Class**: `{class_match.group(1)}` in [{rel_path}](../{rel_path}#L{idx+1})")
         except Exception:
             pass
         key_entry_points = "\n".join(symbols[:20]) or "- None"
@@ -580,20 +725,20 @@ def main():
     readme_tpl = load_template("README-template.zh-CN.md" if is_zh else "README-template.md")
     write_document(os.path.join(ai_context_dir, f"README{suffix}"), readme_tpl)
 
-    # Write or keep .ai-context/project.md
+    # Write or keep .agent_handoff/project.md
     proj_path = os.path.join(ai_context_dir, f"project{suffix}")
     if not os.path.exists(proj_path):
         proj_tpl = load_template("project-template.zh-CN.md" if is_zh else "project-template.md")
         proj_content = proj_tpl.format(
-            project_background="待确认 / To be confirmed",
-            tech_stack_details="- Language:\n- Framework:",
-            project_modules="- `/src`: source\n- `/tests`: tests",
-            setup_commands="pip install -r requirements.txt",
-            build_commands="python3 main.py"
+            project_background="待核实 / To be verified",
+            tech_stack_details="- 待核实 / To be verified",
+            project_modules="- 待核实 / To be verified",
+            setup_commands="# Add only verified setup commands",
+            build_commands="# Add only verified build and run commands"
         )
         write_document(proj_path, proj_content)
 
-    # Write or incrementally update .ai-context/current-task.md
+    # Write or incrementally update .agent_handoff/current-task.md
     task_path = os.path.join(ai_context_dir, f"current-task{suffix}")
     
     # Default initial values
@@ -639,10 +784,10 @@ def main():
         task_checklist=task_checklist,
         current_focus=task_focus
     )
-    if not os.path.exists(task_path) or args.force or args.focus:
+    if not os.path.exists(task_path) or args.force or args.focus or args.refresh:
         write_document(task_path, task_content)
 
-    # Write .ai-context/changed-files.md
+    # Write .agent_handoff/changed-files.md
     changed_path = os.path.join(ai_context_dir, f"changed-files{suffix}")
     changed_tpl = load_template("changed-files-template.zh-CN.md" if is_zh else "changed-files-template.md")
     changed_content = changed_tpl.format(
@@ -656,35 +801,35 @@ def main():
     )
     write_document(changed_path, changed_content)
 
-    # Write or keep .ai-context/decisions.md
+    # Write or keep .agent_handoff/decisions.md
     dec_path = os.path.join(ai_context_dir, f"decisions{suffix}")
     if not os.path.exists(dec_path):
         dec_tpl = load_template("decisions-template.zh-CN.md" if is_zh else "decisions-template.md")
         dec_content = dec_tpl.format(
-            decision_title="初始化架构决策" if is_zh else "Initial Architectural Decision",
-            decision_context="需要确定跨 Agent 交接的规范形式" if is_zh else "Need to establish a standardized schema for cross-agent context handoffs",
-            decision_details="选择使用标准 Markdown 模板并放在 .agent_handoff/ 目录下" if is_zh else "Choose to use standardized Markdown templates stored under .agent_handoff/",
-            decision_consequences="所有支持 Markdown 读取 of AI Agent 都可以无感阅读该上下文" if is_zh else "All AI Agents capable of parsing Markdown can read this context without configuration",
-            decision_status="已批准" if is_zh else "Approved"
+            decision_title="待核实" if is_zh else "To be verified",
+            decision_context="待核实" if is_zh else "To be verified",
+            decision_details="待核实" if is_zh else "To be verified",
+            decision_consequences="待核实" if is_zh else "To be verified",
+            decision_status="待核实" if is_zh else "To be verified"
         )
         write_document(dec_path, dec_content)
 
-    # Write or keep .ai-context/known-issues.md
+    # Write or keep .agent_handoff/known-issues.md
     issues_path = os.path.join(ai_context_dir, f"known-issues{suffix}")
     if not os.path.exists(issues_path):
         issues_tpl = load_template("known-issues-template.zh-CN.md" if is_zh else "known-issues-template.md")
         issues_content = issues_tpl.format(
-            mcp_offline_indicators="- headroom: [OFFLINE] / [离线]",
-            active_blockers="- None" if not is_zh else "- 无",
-            historical_traps="- None" if not is_zh else "- 无",
-            env_constraints="- Git CLI needs to be installed" if not is_zh else "- 需在支持 Git 的环境下运行"
+            mcp_offline_indicators="- To be verified" if not is_zh else "- 待核实",
+            active_blockers="- To be verified" if not is_zh else "- 待核实",
+            historical_traps="- To be verified" if not is_zh else "- 待核实",
+            env_constraints="- To be verified" if not is_zh else "- 待核实"
         )
         write_document(issues_path, issues_content)
 
     # Run test command if provided
     test_output = "N/A"
     test_status = "Untested" if not is_zh else "未测试"
-    test_cmd_used = "pytest"
+    test_cmd_used = "# Add only a verified test command" if not is_zh else "# 仅填写已经核实的测试命令"
     
     if getattr(args, 'test', None):
         test_cmd_used = args.test
@@ -702,14 +847,14 @@ def main():
             test_output = f"Error executing test command: {e}"
         print(f"Test status: {test_status}")
 
-    # Write or keep/update .ai-context/validation.md
+    # Write or keep/update .agent_handoff/validation.md
     val_path = os.path.join(ai_context_dir, f"validation{suffix}")
     
     if not os.path.exists(val_path) or args.force:
         val_tpl = load_template("validation-template.zh-CN.md" if is_zh else "validation-template.md")
         val_content = val_tpl.format(
             test_commands=test_cmd_used,
-            manual_verification_steps="- Run the application manually and test handoff files" if not is_zh else "- 手动验证生成的上下文文件",
+            manual_verification_steps="- To be verified" if not is_zh else "- 待核实",
             last_validation_date=now_str,
             last_validation_status=test_status,
             last_validation_output=test_output
@@ -753,12 +898,27 @@ def main():
         except Exception as e:
             print(f"Warning: Failed to update existing validation file: {e}")
 
-    # Write .ai-context/next-agent-prompt.md
+    # Write .agent_handoff/next-agent-prompt.md
     prompt_path = os.path.join(ai_context_dir, f"next-agent-prompt{suffix}")
     prompt_tpl = load_template("next-agent-prompt-template.zh-CN.md" if is_zh else "next-agent-prompt-template.md")
-    write_document(prompt_path, prompt_tpl)
+    mode_labels = {
+        "analysis": "Analysis mode: inspect and explain; do not modify code without explicit approval.",
+        "fix": "Fix mode: reproduce, implement the scoped fix, and verify it.",
+        "review": "Review mode: report evidence-backed findings; do not modify code.",
+        "handoff": "Handoff mode: validate the snapshot and continue only after confirming scope.",
+    }
+    mode_labels_zh = {
+        "analysis": "分析模式：检查并解释；未经明确授权不要修改代码。",
+        "fix": "修复模式：复现问题，实施范围内修复并完成验证。",
+        "review": "审查模式：给出有证据支撑的问题，不修改代码。",
+        "handoff": "交接模式：先验证快照，再在确认范围后继续。",
+    }
+    write_document(
+        prompt_path,
+        prompt_tpl.format(mode_instruction=(mode_labels_zh if is_zh else mode_labels)[args.mode]),
+    )
 
-    # Write .ai-context/agent-handoff.md
+    # Write .agent_handoff/agent-handoff.md
     handoff_path = os.path.join(ai_context_dir, f"agent-handoff{suffix}")
     handoff_tpl = load_template("agent-handoff-template.zh-CN.md" if is_zh else "agent-handoff-template.md")
     
@@ -771,8 +931,8 @@ def main():
         "  开始[Start] --> 业务处理[Process] --> 结束[End]"
     )
     business_flow_steps = (
-        "| Step 1 | Entry | `[cli.py#L190](file://./agent_context_handoff/cli.py#L190)` | CLI entry execution pipeline |" if not is_zh else
-        "| 步骤 1 | 请求入口 | `[cli.py#L190](file://./agent_context_handoff/cli.py#L190)` | CLI 入口执行流 |"
+        "| Step 1 | Entry | `[cli.py#L190](../agent_context_handoff/cli.py#L190)` | CLI entry execution pipeline |" if not is_zh else
+        "| 步骤 1 | 请求入口 | `[cli.py#L190](../agent_context_handoff/cli.py#L190)` | CLI 入口执行流 |"
     )
     
     # Generate placeholder for obsolete legacy code
@@ -785,27 +945,27 @@ def main():
         timestamp=now_str,
         git_commit_sha=git_commit_sha,
         session_id=session_id,
-        built_in_agents_count="17 (built-in)" if not is_zh else "17个 (内置)",
-        understand_anything_count="9 (understand-anything)" if not is_zh else "9个 (理解类)",
-        online_mcps="N/A" if not is_zh else "暂无",
-        offline_mcps="headroom [OFFLINE] / [离线]",
-        active_screens="N/A" if not is_zh else "暂无",
-        current_task_brief="开发/生成 agent-context-handoff Skill" if is_zh else "Develop/generate agent-context-handoff Skill",
-        project_context="自动压缩/打包当前 Coding Agent 上下文" if is_zh else "Automated compression of Coding Agent context",
-        tech_stack="Python / Shell / Markdown",
+        built_in_agents_count="To be verified" if not is_zh else "待核实",
+        understand_anything_count="To be verified" if not is_zh else "待核实",
+        online_mcps="To be verified" if not is_zh else "待核实",
+        offline_mcps="To be verified" if not is_zh else "待核实",
+        active_screens="To be verified" if not is_zh else "待核实",
+        current_task_brief="待当前 Agent 核实并补充" if is_zh else "To be verified and completed by the current agent.",
+        project_context="待当前 Agent 核实并补充" if is_zh else "To be verified and completed by the current agent.",
+        tech_stack="待核实" if is_zh else "To be verified",
         relevant_files=relevant_files_table,
         mermaid_business_flow=mermaid_business_flow,
         business_flow_steps=business_flow_steps,
         platform_dependencies=platform_dependencies_str,
-        completed_work="- Init repo\n- Create templates\n- Implement CLI" if not is_zh else "- 初始化仓库\n- 创建模板\n- 实现 CLI",
-        remaining_work="- Validate locally\n- Publish to GitHub" if not is_zh else "- 本地验证\n- 发布到 GitHub",
+        completed_work="- To be verified" if not is_zh else "- 待核实",
+        remaining_work="- To be verified" if not is_zh else "- 待核实",
         obsolete_code=obsolete_code_placeholder,
-        current_errors="None" if not is_zh else "无",
-        confirmed_decisions="- Standardized folder layout '.agent_handoff/'" if not is_zh else "- 标准化 '.agent_handoff/' 目录结构",
+        current_errors="To be verified" if not is_zh else "待核实",
+        confirmed_decisions="- To be verified" if not is_zh else "- 待核实",
         next_session_focus=next_session_focus_val,
-        known_issues_summary="- headroom: [OFFLINE] / [离线] \n- No active blockers" if not is_zh else "- headroom: [离线] \n- 无活动阻塞项",
+        known_issues_summary="- To be verified" if not is_zh else "- 待核实",
         rejected_alternatives="| N/A | N/A |" if not is_zh else "| 无 | 无 |",
-        validation_commands="python3 -m agent_context_handoff.cli --lang zh" if is_zh else "python3 -m agent_context_handoff.cli --lang en"
+        validation_commands="# 仅填写已经核实的命令" if is_zh else "# Add only verified commands"
     )
     write_document(handoff_path, handoff_content, overwrite=args.force or not os.path.exists(handoff_path))
 
@@ -813,24 +973,31 @@ def main():
     agents_path = os.path.join(target_dir, "AGENTS.md")
     agents_section_tpl = load_template("agents-section-template.zh-CN.md" if is_zh else "agents-section-template.md")
 
-    needs_section = True
     if os.path.exists(agents_path):
         with open(agents_path, "r", encoding="utf-8") as f:
             existing_content = f.read()
-        if "AI Context Handoff" in existing_content:
-            needs_section = False
     else:
         existing_content = "# AI Agents Guide\n\nThis file serves as a guide for AI Coding Agents working on this project."
 
-    if needs_section:
-        updated_content = existing_content + "\n" + agents_section_tpl
-        write_document(agents_path, updated_content)
-        print("Updated AGENTS.md with AI Context Handoff section.")
-    else:
-        print("AGENTS.md already contains AI Context Handoff section. Skipping append.")
+    updated_content = update_agents_handoff_section(existing_content, agents_section_tpl)
+    write_document(agents_path, updated_content)
+    print("Updated AGENTS.md with AI Context Handoff section.")
 
     if getattr(args, 'pack', False):
         package_context(ai_context_dir, target_dir, args.lang)
+
+    git_branch = command_output(["git", "-C", target_dir, "branch", "--show-current"], report_error=False) or "N/A"
+    state = {
+        "schema_version": 1,
+        "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "language": args.lang,
+        "git_branch": git_branch,
+        "git_commit": git_commit_sha,
+    }
+    write_document(
+        os.path.join(ai_context_dir, "state.json"),
+        json.dumps(state, ensure_ascii=False, indent=2) + "\n",
+    )
 
     print("Successfully generated context files.")
 

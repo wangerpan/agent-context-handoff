@@ -1,7 +1,5 @@
 # Project Code Map & Architecture
 
-[English](code-map.md) | [简体中文](code-map.zh-CN.md)
-
 ## 📂 Physical Directory Layout
 {directory_layout}
 

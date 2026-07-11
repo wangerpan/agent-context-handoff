@@ -52,7 +52,7 @@ Every generated handoff document must include these fixed sections:
 - **Current State (Runtime Status)**:
   - Document active agent classifications, MCP server states, and active background/managed screen session counts (Skip if N/A for project type).
 - **Core Artifact Paths & Size Audit**: Key changed files, their roles, current statuses, and actual physical line counts.
-- **Critical Code Path & Business Flow**: Graphic flowcharts (Mermaid syntax) and clickable file/symbol jump tables (`file://` scheme with line numbers) tracking the specific logic pipeline of the task.
+- **Critical Code Path & Business Flow**: Graphic flowcharts (Mermaid syntax) and repository-relative file/symbol jump tables with line numbers.
 - **Platform Dependency Audit**: (Required for cross-platform/migration projects) Table of platform-specific APIs (e.g. `chrome.storage.local`) and their target equivalents (e.g. `localStorage`).
 - **Prerequisite Background Launch Guides**: Explicitly document if background screen sessions (e.g. `screen -r`) require trigger calls (such as `/config` or `/cli` POST requests) before they can be attached.
 - **Startup / Validation Commands**: Provide runnable command blocks to start, test, or verify the application.
@@ -71,6 +71,7 @@ If the CLI tool is available in the target workspace (e.g. `agent-context-handof
 # Specifying language, next session focus, enabling code/API scanning, running tests, and XML packaging
 agent-context-handoff --lang en --focus "Next session focus" --scan --test "pytest" --pack
 ```
+Before packaging or sharing, run `agent-context-handoff lint --dir <project>`. If it reports stale branch, commit, or timestamp metadata, re-check the current workspace before regenerating. Use `--mode analysis|fix|review|handoff` to constrain the incoming agent prompt.
 After execution, manually refine the fields with specific context details. Direct downstream agents to read the packaged XML block (`.agent_handoff/packaged-context.xml`) to absorb all context in a single token-efficient step.
 
 ### 5. Redaction of Sensitive Data
@@ -100,7 +101,7 @@ Must follow the layout:
 9. **Work Completed / Remaining**: Lists of achievements and pending items with prefix state symbols.
 10. **Obsolete / Legacy Code**: Scan results for unused files or deprecated paths.
 11. **Current Errors / Blockers**: Active errors.
-12. **Confirmed Decisions**: Architectural choices (concise summaries with file link references like `[filename](file:///path/to/file#L123)`).
+12. **Confirmed Decisions**: Architectural choices with concise summaries and repository-relative file references.
 13. **Focus for Next Session**: Dedicated section describing next steps or user-defined targets.
 14. **Known Issues & Environmental Limits**: Document environmental constraints, and tag known offline services.
 15. **Validation Commands**: Execute blocks containing dynamic assertions.
