@@ -11,6 +11,7 @@
 ```
 .agent_handoff/              # 自动生成的交接目录
 ├── packaged-context.xml     # 统一打包的 XML 上下文（推荐接手入口）
+├── state.json               # 快照分支、提交、时间和语言
 ├── code-map.md              # 项目静态地图（架构入口与 Mermaid 依赖拓扑）
 ├── README.md               # 目录文件职责说明
 ├── project.md              # 项目技术栈与构建指南说明
@@ -51,11 +52,21 @@ ai-context-handoff --lang en --scan --test "pytest" --pack
 
 # 生成中文版（并指定目录）
 ai-context-handoff --lang zh --dir /path/to/project --scan --test "pytest" --pack
+
+# 检查新鲜度与内容安全；自动化场景可增加 --json
+ai-context-handoff lint --dir /path/to/project
+
+# 检查安装状态和交接健康度
+ai-context-handoff doctor --dir /path/to/project
 ```
 * CLI 工具会自动统计 Git 变更，**智能提取并保留原有的任务清单与目标**，并对敏感信息（API Key、Token、邮箱、内网 IP 等）进行自动脱敏过滤，替换为 `<REDACTED_SECRET>`。
 * `--scan` 会扫描工程中平台专属的 API 引用（如 `chrome.*`），解析第三方包依赖，并生成静态架构索引 `code-map.md`。
-* `--test` 会自动在当前项目运行指定的测试指令，并将执行输出（stdout/stderr）和结果写入 `validation.md`。
-* `--pack` 会将当前语言的所有 `.agent_handoff` 交接文档打包进单一的 XML 文件（`.agent_handoff/packaged-context.xml` 或 `.zh-CN.xml`），从而提高后续接手 Agent 的 Token 吸收率与速度。
+* `--mode analysis|fix|review|handoff` 会按接手后的授权模式生成不同提示词。
+* `--refresh` 会刷新任务元数据，同时保留人工维护的目标、清单与当前焦点。
+* `lint` 检查分支、提交、时间戳是否过期，以及旧目录、非便携链接和未验证示例声明；`doctor` 额外报告 CLI 版本与环境健康度。
+* `--test` 会通过本地 Shell 执行指定字符串，并将 stdout/stderr 和结果写入 `validation.md`。它只接受可信的本地输入，不要传入未经信任的文本。
+* `--pack` 会将当前语言的所有 `.agent_handoff` 文档脱敏后打包进单一 XML 文件（`.agent_handoff/packaged-context.xml` 或 `.zh-CN.xml`）。
+* 正则脱敏只是纵深防御，跨信任边界分享前仍需复核最终交接包。
 
 ### 方法 B：Agent 系统规则集成
 1. 复制项目中的 [SKILL.zh-CN.md](agent_context_handoff/SKILL.zh-CN.md) 或 [SKILL.md](agent_context_handoff/SKILL.md)。

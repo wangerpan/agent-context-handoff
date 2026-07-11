@@ -1,7 +1,5 @@
 # Agent Project Handoff Documentation
 
-[English](agent-handoff.md) | [简体中文](agent-handoff.zh-CN.md)
-
 ## ⚡ Recommended Reading Order for Incoming Agent
 
 | Priority | Section | Reason |
@@ -23,6 +21,12 @@
 
 ## 1. Current Task
 {current_task_brief}
+
+## Trust Levels
+- **Verified facts**: Facts supported by current code, Git state, commands, or test output.
+- **Historical context**: Prior conclusions that may be stale; re-check before relying on them.
+- **Assumptions**: Working hypotheses, never present them as confirmed behavior.
+- **Unverified TODOs**: Planned or incomplete work that still requires validation.
 
 ## 2. Current State (Runtime Status - Skip if N/A)
 - **Active Agent Classifications**:

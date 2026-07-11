@@ -1,5 +1,7 @@
 You are taking over an engineering task handed over by another coding agent.
 
+**Operating mode**: {mode_instruction}
+
 Please first read:
 1. `AGENTS.md` in the project root
 2. `.agent_handoff/README.md`

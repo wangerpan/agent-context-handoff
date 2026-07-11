@@ -1,7 +1,5 @@
 # Agent Handoff Directory
 
-[English](README.md) | [简体中文](README.zh-CN.md)
-
 This directory contains project maps, current tasks, and verification logs designed for AI Coding Agents.
 
 ## Files Layout
